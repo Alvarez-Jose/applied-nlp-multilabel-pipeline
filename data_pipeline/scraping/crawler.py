@@ -14,7 +14,6 @@ def is_article_url(url):
 
 
 async def fetch(session, url, semaphore, headers):
-    """Download a page politely (with semaphore rate limiting)."""
     async with semaphore:
         try:
             async with session.get(url, headers=headers, timeout=15) as resp:
