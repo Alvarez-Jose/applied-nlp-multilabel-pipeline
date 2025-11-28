@@ -7,7 +7,6 @@ from typing import List, Dict, Optional
 import gspread
 
 from data_pipeline.database.models import Report
-# from utilities import incident_id   # <- you don't actually need this
 from utilities.incident_id import format_incident_id
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -65,23 +64,81 @@ def create_incident(
     incident_date: date,
     location_norm: str,
     incident_type: Optional[str] = None,
+    jurisdiction: Optional[str] = None,
+    location_type: Optional[str] = None,
+    region: Optional[str] = None,
+    perpetrator: Optional[str] = None,
+    palestinian_involvement: Optional[str] = None,
+    raid: Optional[str] = None,
+    arrest_detention: Optional[str] = None,
+    physical_assault: Optional[str] = None,
+    harm_to_property: Optional[str] = None,
+    dispossession: Optional[str] = None,
+    religious_encroachment: Optional[str] = None,
+    restriction_of_freedoms: Optional[str] = None,
+    coercive_actions: Optional[str] = None,
+    protest: Optional[str] = None,
+    number_arrested: Optional[str] = None,
+    number_injured: Optional[str] = None,
+    killed: Optional[str] = None,
+    type_of_property_harmed: Optional[str] = None,
+    type_of_property_dispossessed: Optional[str] = None,
+    material_loss: Optional[str] = None,
+    multi_community_incident: Optional[str] = None,
+    description: Optional[str] = None,
+    source_1: Optional[str] = None,
+    source_2: Optional[str] = None,
+    source_3: Optional[str] = None,
+    source_4: Optional[str] = None,
+    source_5: Optional[str] = None,
+    source_6: Optional[str] = None,
 ) -> str:
-    """Create a new incident row in the Incidents sheet and return its incident_id."""
+    """
+    Create a new incident row in the Incidents sheet and return its incident_id.
+
+    Only the first three arguments are required; everything else is optional and
+    defaults to empty string in the sheet if not provided.
+    """
     ws = get_sheet(INCIDENTS_SHEET_NAME)
 
     seq = get_next_sequence(governorate_code, incident_date)
     incident_id = format_incident_id(governorate_code, incident_date, seq)
 
-    # This order MUST match the header row:
-    # incident_id | governorate_code | incident_date | location_norm | incident_type | conflict_casualty_count | conflict_perpetrator
+    # This order MUST match the Incidents header row exactly.
     row = [
         incident_id,
         governorate_code,
-        incident_date.isoformat(),  # <- FIXED: call isoformat()
+        incident_date.isoformat(),
         location_norm,
         incident_type or "",
-        "FALSE",  # conflict_casualty_count
-        "FALSE",  # conflict_perpetrator
+        jurisdiction or "",
+        location_type or "",
+        region or "",
+        perpetrator or "",
+        palestinian_involvement or "",
+        raid or "",
+        arrest_detention or "",
+        physical_assault or "",
+        harm_to_property or "",
+        dispossession or "",
+        religious_encroachment or "",
+        restriction_of_freedoms or "",
+        coercive_actions or "",
+        protest or "",
+        number_arrested or "",
+        number_injured or "",
+        killed or "",
+        type_of_property_harmed or "",
+        type_of_property_dispossessed or "",
+        material_loss or "",
+        multi_community_incident or "",
+        description or "",
+        source_1 or "",
+        source_2 or "",
+        source_3 or "",
+        source_4 or "",
+        source_5 or "",
+        source_6 or "",
     ]
 
     ws.append_row(row)
@@ -129,5 +186,3 @@ def add_reports(reports: List[Report]) -> None:
 
     # Append all rows in one API call
     ws.append_rows(rows_to_append)
-
-    
