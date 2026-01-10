@@ -8,9 +8,13 @@ from collections import deque
 
 
 def is_article_url(url):
-    # WAFA article URLs typically include /Pages/Details/######
     url = url.lower()
-    return any(["pages/details/" in url])
+    # ========== NEW CODE ==========
+    # Filter out French articles early
+    if "french.wafa.ps" in url:
+        return False  # <-- This prevents French URLs from even being considered
+    # ==============================
+    return "pages/details/" in url
 
 
 async def fetch(session, url, semaphore, headers):
@@ -25,6 +29,10 @@ async def fetch(session, url, semaphore, headers):
 
 
 async def crawl(start_url, max_pages=300, delay=1.0):
+    # ========== NEW CODE ==========
+    start_host = urlparse(start_url).netloc.lower()   # Get starting host (e.g., 'english.wafa.ps')
+    # ==============================
+    
     parsed = urlparse(start_url)
     domain = parsed.scheme + "://" + parsed.netloc
 
@@ -65,14 +73,30 @@ async def crawl(start_url, max_pages=300, delay=1.0):
             soup = BeautifulSoup(html, "html.parser")
 
             for a in soup.find_all("a", href=True):
-                link = urljoin(url, a["href"])
+                href = a.get("href")
+
+                if isinstance(href, list):
+                    if not href:
+                        continue
+                    href = href[0]
+
+                if not isinstance(href, str):
+                    continue
+
+                link = urljoin(url, href)
                 norm = urlparse(link)._replace(fragment="").geturl()
+
+                # ========== NEW CODE ==========
+                # ✅ Only crawl within the same host as start_url (english.wafa.ps)
+                norm_host = urlparse(norm).netloc.lower()
+                if norm_host != start_host:
+                    continue  # Skip URLs from other domains
+                # ==============================
 
                 if norm not in visited:
                     queue.append(norm)
-                
-                # checking if url is valid and save articles
+
                 if is_article_url(norm):
                     found_articles.add(norm)
 
-    return list(found_articles)
+    return sorted(found_articles)

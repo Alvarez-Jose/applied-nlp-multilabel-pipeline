@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, date
+from datetime import date
 from typing import Optional
 
 
@@ -8,19 +8,18 @@ class Report:
     """
     One source account (article, NGO report, etc.)
     RAs or scrapers create these. They link to an Incident.
+    Date-only version for simplicity.
     """
     source_name: str
     url: str
     title: str
     body: str
 
-    published_at_utc: datetime
-    published_at_local: datetime
+    published_date: date  # Date only, no time
 
     language: str
     location_raw: Optional[str] = None
     actors_raw: Optional[str] = None
-
 
 
 @dataclass
