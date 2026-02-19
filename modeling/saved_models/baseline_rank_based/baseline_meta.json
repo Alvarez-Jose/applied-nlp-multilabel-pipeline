@@ -1,0 +1,327 @@
+{
+  "model_type": "TF-IDF + MultiOutput LogisticRegression",
+  "prediction_method": "rank_based",
+  "target_mode": "meanprob_test_capped_shrunk",
+  "use_isotonic_calibration": true,
+  "data_path": "C:\\palestine-violence-archive\\data\\processed\\oppression_2023_2025.csv",
+  "labels": [
+    "raid_y",
+    "arrest_detention_y",
+    "physical_assault_y",
+    "harm_to_property_y",
+    "dispossession_y",
+    "religious_encroachment_y",
+    "restriction_of_freedoms_y",
+    "coercive_actions_y",
+    "protest_y",
+    "multi_community_incident_y"
+  ],
+  "raw_bool_labels": [
+    "raid",
+    "arrest_detention",
+    "religious_encroachment",
+    "protest",
+    "multi_community_incident"
+  ],
+  "raw_presence_labels": [
+    "physical_assault",
+    "harm_to_property",
+    "dispossession",
+    "restriction_of_freedoms",
+    "coercive_actions"
+  ],
+  "use_enhanced_text": true,
+  "meta_cols_lite": [
+    "perpetrator",
+    "governorate",
+    "area",
+    "location_type"
+  ],
+  "split": {
+    "train": {
+      "years": "2023+2024",
+      "rows": 3312
+    },
+    "dev": {
+      "year": "2024 (subset)",
+      "rows": 244,
+      "fraction": 0.15
+    },
+    "test": {
+      "year": 2025,
+      "rows": 2118
+    }
+  },
+  "vectorizer_params": {
+    "max_features": 10000,
+    "ngram_range": [
+      1,
+      3
+    ],
+    "stop_words": "english",
+    "min_df": 2,
+    "max_df": 0.95
+  },
+  "model_params": {
+    "C": 1.0,
+    "max_iter": 1000,
+    "penalty": "l2"
+  },
+  "target_config": {
+    "max_ratio_default": 1.25,
+    "max_ratio_by_label": {
+      "coercive_actions_y": 1.1,
+      "arrest_detention_y": 1.1,
+      "restriction_of_freedoms_y": 1.15,
+      "physical_assault_y": 1.2,
+      "harm_to_property_y": 1.2
+    },
+    "alpha_default": 0.7,
+    "alpha_by_label": {
+      "coercive_actions_y": 0.4,
+      "arrest_detention_y": 0.5,
+      "physical_assault_y": 0.6
+    },
+    "min_target": 0.002,
+    "max_target": 0.95
+  },
+  "target_rates": {
+    "train": {
+      "raid_y": 0.5446859903381642,
+      "arrest_detention_y": 0.3828502415458937,
+      "physical_assault_y": 0.38405797101449274,
+      "harm_to_property_y": 0.2992149758454106,
+      "dispossession_y": 0.07729468599033816,
+      "religious_encroachment_y": 0.011473429951690822,
+      "restriction_of_freedoms_y": 0.14432367149758454,
+      "coercive_actions_y": 0.4553140096618358,
+      "protest_y": 0.035628019323671496,
+      "multi_community_incident_y": 0.08756038647342995
+    },
+    "dev": {
+      "raid_y": 0.610655737704918,
+      "arrest_detention_y": 0.3401639344262295,
+      "physical_assault_y": 0.38524590163934425,
+      "harm_to_property_y": 0.27459016393442626,
+      "dispossession_y": 0.13114754098360656,
+      "religious_encroachment_y": 0.004098360655737705,
+      "restriction_of_freedoms_y": 0.13114754098360656,
+      "coercive_actions_y": 0.6434426229508197,
+      "protest_y": 0.0,
+      "multi_community_incident_y": 0.0942622950819672
+    },
+    "target_dev": {
+      "raid_y": 0.5908648134948918,
+      "arrest_detention_y": 0.36150708798606157,
+      "physical_assault_y": 0.38477072938940365,
+      "harm_to_property_y": 0.28197760750772155,
+      "dispossession_y": 0.0966183574879227,
+      "religious_encroachment_y": 0.006310881444523641,
+      "restriction_of_freedoms_y": 0.13510038013779996,
+      "coercive_actions_y": 0.5008454106280193,
+      "protest_y": 0.02580685591162081,
+      "multi_community_incident_y": 0.09225172249940602
+    },
+    "target_test": {
+      "raid_y": 0.5726563279278165,
+      "arrest_detention_y": 0.3020957229603462,
+      "physical_assault_y": 0.41465943021533747,
+      "harm_to_property_y": 0.28270191614935253,
+      "dispossession_y": 0.0966183574879227,
+      "religious_encroachment_y": 0.007176684320729154,
+      "restriction_of_freedoms_y": 0.16597222222222222,
+      "coercive_actions_y": 0.5008454106280193,
+      "protest_y": 0.026688945607812334,
+      "multi_community_incident_y": 0.10945048309178744
+    }
+  },
+  "dev": {
+    "rows": 244,
+    "macro_f1": 0.616550769890836,
+    "micro_f1": 0.7964601769911505,
+    "mean_auc": 0.9186514425471853,
+    "mean_prauc": 0.8437861957872399,
+    "per_label": [
+      [
+        "raid_y",
+        0.8680555555555556,
+        0.8389261744966443,
+        0.8532423208191127,
+        0.8903214411868597,
+        0.9181389282322439
+      ],
+      [
+        "arrest_detention_y",
+        0.8522727272727273,
+        0.9036144578313253,
+        0.8771929824561403,
+        0.9598892464267007,
+        0.9331402649408738
+      ],
+      [
+        "physical_assault_y",
+        0.851063829787234,
+        0.851063829787234,
+        0.851063829787234,
+        0.9364893617021276,
+        0.9085832476949323
+      ],
+      [
+        "harm_to_property_y",
+        0.7391304347826086,
+        0.7611940298507462,
+        0.75,
+        0.9035331815498777,
+        0.8138631738738236
+      ],
+      [
+        "dispossession_y",
+        0.8333333333333334,
+        0.625,
+        0.7142857142857143,
+        0.9412588443396226,
+        0.8022026568832619
+      ],
+      [
+        "religious_encroachment_y",
+        0.0,
+        0.0,
+        0.0,
+        NaN,
+        NaN
+      ],
+      [
+        "restriction_of_freedoms_y",
+        0.696969696969697,
+        0.71875,
+        0.7076923076923077,
+        0.9164209905660378,
+        0.7678511409016531
+      ],
+      [
+        "coercive_actions_y",
+        0.8688524590163934,
+        0.6751592356687898,
+        0.7598566308243727,
+        0.840251848597994,
+        0.8732005751115159
+      ],
+      [
+        "protest_y",
+        0.0,
+        0.0,
+        0.0,
+        NaN,
+        NaN
+      ],
+      [
+        "multi_community_incident_y",
+        0.6521739130434783,
+        0.6521739130434783,
+        0.6521739130434783,
+        0.9610466260082628,
+        0.7333095786596155
+      ]
+    ]
+  },
+  "test": {
+    "rows": 2118,
+    "macro_f1": 0.4833520176355261,
+    "micro_f1": 0.6415889256695757,
+    "mean_auc": 0.8090518453629446,
+    "mean_prauc": 0.4937161370965993,
+    "per_label": [
+      [
+        "raid_y",
+        0.8194558944765046,
+        0.8022598870056498,
+        0.8107667210440457,
+        0.8571570893257708,
+        0.8808948262950567
+      ],
+      [
+        "arrest_detention_y",
+        0.465625,
+        0.7563451776649747,
+        0.5764023210831721,
+        0.8765686280283134,
+        0.6586332870672247
+      ],
+      [
+        "physical_assault_y",
+        0.6150341685649203,
+        0.7941176470588235,
+        0.693196405648267,
+        0.8657208745807085,
+        0.743140806414804
+      ],
+      [
+        "harm_to_property_y",
+        0.7746243739565943,
+        0.6763848396501457,
+        0.7221789883268482,
+        0.8811332394090916,
+        0.7732049830772528
+      ],
+      [
+        "dispossession_y",
+        0.5804878048780487,
+        0.40893470790378006,
+        0.4798387096774194,
+        0.8572077486048336,
+        0.5036945898869191
+      ],
+      [
+        "religious_encroachment_y",
+        0.13333333333333333,
+        0.1,
+        0.11428571428571428,
+        0.8768827454718781,
+        0.1151629104097203
+      ],
+      [
+        "restriction_of_freedoms_y",
+        0.4460227272727273,
+        0.5508771929824562,
+        0.49293563579277866,
+        0.8221207683693686,
+        0.4025132428382797
+      ],
+      [
+        "coercive_actions_y",
+        0.5532516493873704,
+        0.6257995735607675,
+        0.5872936468234117,
+        0.6645084203678943,
+        0.5650356066993112
+      ],
+      [
+        "protest_y",
+        0.14035087719298245,
+        0.42105263157894735,
+        0.21052631578947367,
+        0.7971088989744489,
+        0.19011438608202996
+      ],
+      [
+        "multi_community_incident_y",
+        0.125,
+        0.17575757575757575,
+        0.14609571788413098,
+        0.5921100404971373,
+        0.10476673219539474
+      ]
+    ]
+  },
+  "bootstrap_test": {
+    "macro_f1_ci95": [
+      0.46052843951049127,
+      0.502862185231468
+    ],
+    "micro_f1_ci95": [
+      0.6310346096818858,
+      0.6512986786858846
+    ]
+  },
+  "seed": 42
+}
