@@ -112,37 +112,31 @@ CANONICAL_OUTPUT_COLS = [
 
 def map_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Rename Sheets column names to the canonical schema used by normalize_raw.py.
+    Rename Incidents sheet column names to the canonical schema used by normalize_raw.py.
 
-    Sheets column  →  Canonical column
-    incident_id    →  id
-    incident_date  →  date
-    location_norm  →  location_name
-    region         →  area
-    governorate_code → governorate  (via code lookup, done separately)
+    The Incidents sheet uses these column names (as of current setup):
+        incident_id, date, governorate, area, location_name, location_type,
+        perpetrator, description, <10 label cols>, review_status, reviewer_notes,
+        source, url
+
+    Only one rename is needed — incident_id → id. All other column names already
+    match the canonical schema. The single 'source' column is mapped to 'source_1'.
     """
     renames = {
-        "incident_id":   "id",
-        "incident_date": "date",
-        "location_norm": "location_name",
-        "region":        "area",
+        "incident_id": "id",
+        "source":      "source_1",   # sheet has single source col; canonical has source_1..6
     }
     df = df.rename(columns=renames)
 
-    # governorate_code → full governorate name
-    if "governorate_code" in df.columns:
-        df["governorate"] = (
-            df["governorate_code"]
-            .str.upper()
-            .map(GOVERNORATE_CODE_TO_NAME)
-            .fillna(df["governorate_code"])   # fall back to raw code if unknown
-        )
-
-    # Columns present in Sheets but not in canonical schema — drop them
-    drop_cols = {"incident_type", "material_loss", "governorate_code"}
+    # Drop columns that have no place in the canonical training schema
+    drop_cols = {
+        "review_status", "reviewer_notes",   # workflow metadata, not features
+        "incident_type", "material_loss",    # legacy cols that may appear in older exports
+        "governorate_code",                  # not in current sheet, but guard against old data
+    }
     df = df.drop(columns=[c for c in drop_cols if c in df.columns])
 
-    # Columns in canonical schema but absent from Sheets — add as empty
+    # Add any canonical columns absent from the sheet as empty strings
     for col in CANONICAL_OUTPUT_COLS:
         if col not in df.columns:
             df[col] = ""

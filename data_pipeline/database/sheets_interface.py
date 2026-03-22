@@ -25,7 +25,23 @@ REPORTS_SHEET_NAME   = "Reports"
 REVIEW_SHEET_NAME    = "Review"
 
 # Maximum retries for ID collision
-MAX_ID_RETRIES = 5
+MAX_ID_RETRIES = 20
+
+# Governorate code → full name (must match actual sheet values)
+GOVERNORATE_CODE_TO_NAME = {
+    "NAB":  "Nablus",
+    "QAL":  "Qalqilya",
+    "TUB":  "Tubas",
+    "SAL":  "Salfit",
+    "TUL":  "Tulkarm",
+    "JEN":  "Jenin",
+    "JER":  "Jericho",
+    "JVA":  "Jordan Valley",
+    "RAM":  "Ramallah and al-Bireh",
+    "BET":  "Bethlehem",
+    "HEB":  "Hebron",
+    "JERU": "Jerusalem",
+}
 
 
 def get_client() -> Client:
@@ -117,12 +133,14 @@ def get_next_sequence(governorate_code: str, incident_date: date) -> int:
     """Count how many incidents already exist for this governorate + date, then assign the next sequence number."""
     incidents = list_incidents()
     target_date_str = incident_date.isoformat()
+    # The sheet stores full governorate name in the 'governorate' column
+    gov_name = GOVERNORATE_CODE_TO_NAME.get(governorate_code.upper(), governorate_code)
 
     count = sum(
         1
         for inc in incidents
-        if inc.get("governorate_code") == governorate_code
-        and inc.get("incident_date") == target_date_str
+        if inc.get("governorate") == gov_name
+        and inc.get("date") == target_date_str
     )
 
     return count + 1
@@ -184,9 +202,9 @@ def create_incident(
     """
     ws = get_sheet(INCIDENTS_SHEET_NAME)
 
-    # Validate required headers exist
+    # Validate required headers exist (using actual sheet column names)
     headers = ws.row_values(1)
-    required_headers = {"incident_id", "governorate_code", "incident_date", "location_norm"}
+    required_headers = {"incident_id", "date", "governorate", "description"}
     missing_headers = required_headers - set(headers)
     if missing_headers:
         raise RuntimeError(f"Incidents sheet missing required headers: {missing_headers}")
@@ -208,41 +226,38 @@ def create_incident(
     if incident_id is None:
         raise RuntimeError(f"Failed to allocate unique incident_id after {MAX_ID_RETRIES} attempts")
 
-    # Create data dict with proper column mapping
+    # Resolve full governorate name (sheet stores full name, not code)
+    gov_name = GOVERNORATE_CODE_TO_NAME.get(governorate_code.upper(), governorate_code)
+
+    # Combine source URLs into a single 'source' column (comma-separated)
+    source_parts = [s for s in [source_1, source_2, source_3, source_4, source_5, source_6]
+                    if s and s.strip()]
+    source_combined = ", ".join(source_parts)
+
+    # Build data dict using actual Incidents sheet column names
     data = {
-        "incident_id": incident_id,
-        "governorate_code": governorate_code,
-        "incident_date": incident_date.isoformat(),
-        "location_norm": location_norm,
-        "incident_type": incident_type or "",
-        "jurisdiction": jurisdiction or "",
-        "location_type": location_type or "",
-        "region": region or "",
-        "perpetrator": perpetrator or "",
-        "palestinian_involvement": palestinian_involvement or "",
-        "raid": raid or "",
-        "arrest_detention": arrest_detention or "",
-        "physical_assault": physical_assault or "",
-        "harm_to_property": harm_to_property or "",
-        "dispossession": dispossession or "",
+        "incident_id":    incident_id,
+        "date":           incident_date.isoformat(),
+        "governorate":    gov_name,
+        "area":           region or "",
+        "location_name":  location_norm,
+        "location_type":  location_type or "",
+        "perpetrator":    perpetrator or "",
+        "description":    description or "",
+        "raid":                   raid or "",
+        "arrest_detention":       arrest_detention or "",
+        "physical_assault":       physical_assault or "",
+        "harm_to_property":       harm_to_property or "",
+        "dispossession":          dispossession or "",
         "religious_encroachment": religious_encroachment or "",
         "restriction_of_freedoms": restriction_of_freedoms or "",
-        "coercive_actions": coercive_actions or "",
-        "protest": protest or "",
-        "number_arrested": number_arrested or "",
-        "number_injured": number_injured or "",
-        "killed": killed or "",
-        "type_of_property_harmed": type_of_property_harmed or "",
-        "type_of_property_dispossessed": type_of_property_dispossessed or "",
-        "material_loss": material_loss or "",
+        "coercive_actions":       coercive_actions or "",
+        "protest":                protest or "",
         "multi_community_incident": multi_community_incident or "",
-        "description": description or "",
-        "source_1": source_1 or "",
-        "source_2": source_2 or "",
-        "source_3": source_3 or "",
-        "source_4": source_4 or "",
-        "source_5": source_5 or "",
-        "source_6": source_6 or "",
+        "review_status":   "",
+        "reviewer_notes":  "",
+        "source":          source_combined,
+        "url":             source_1 or "",   # primary URL in dedicated column
     }
 
     # Use append_row_by_header for safe column mapping
@@ -265,14 +280,17 @@ def add_reports(reports: List[Report]) -> None:
     # Get headers once
     headers = ws.row_values(1)
 
-    # Get all existing rows to estimate next report_id index
-    existing = ws.get_all_values()
-    # existing includes header row; number of data rows:
-    data_row_count = max(len(existing) - 1, 0)
+    # Derive next report_id from the max existing ID (safe against row deletions)
+    existing_ids = ws.col_values(1)[1:]  # skip header
+    max_num = 0
+    for rid in existing_ids:
+        rid = str(rid).strip()
+        if rid.startswith("R") and rid[1:].isdigit():
+            max_num = max(max_num, int(rid[1:]))
 
     rows_to_append = []
     for i, r in enumerate(reports):
-        report_number = data_row_count + i + 1  # 1-based
+        report_number = max_num + i + 1
         report_id = f"R{report_number:05d}"     # e.g. R00001
 
         # Format date as ISO string (YYYY-MM-DD)
@@ -333,6 +351,11 @@ def push_review_batch(df: pd.DataFrame) -> int:
                 if len(row) > rid_idx and row[rid_idx]
             }
         except ValueError:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "Review sheet has no 'row_id' column — cannot check for duplicates. "
+                "All rows will be appended."
+            )
             existing_row_ids = set()
 
     # Drop rows already in the sheet

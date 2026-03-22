@@ -6,11 +6,14 @@ from typing import Optional, List
 
 def clean_article_text(text: str) -> str:
     '''
-    clean article text by removing boilerpalate and normalizing whitespace
+    clean article text by removing boilerplate and normalizing whitespace
     '''
     if not text:
         return ""
-    
+
+    # Strip Unicode replacement characters (U+FFFD) left by encoding errors in the scraper
+    text = text.replace("\ufffd", "").replace("\x00", "")
+
     # Remove excessive whitespace
     text = ' '.join(text.split())
     
