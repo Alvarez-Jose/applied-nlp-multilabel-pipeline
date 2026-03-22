@@ -40,6 +40,28 @@ import streamlit as st
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PYTHON       = sys.executable
 
+# ---------------------------------------------------------------------------
+# Service account — write from Streamlit secrets if not already on disk
+# ---------------------------------------------------------------------------
+def _ensure_service_account() -> None:
+    """
+    On Streamlit Cloud the service_account.json cannot be committed to git.
+    Instead, paste the JSON content into the app's Secrets under the key
+    [gcp_service_account].  This function writes it to disk once at startup
+    so that all pipeline subprocesses can find it at the expected path.
+    """
+    sa_path = PROJECT_ROOT / "service_account.json"
+    if sa_path.exists():
+        return
+    try:
+        sa_info = dict(st.secrets.get("gcp_service_account", {}))
+        if sa_info:
+            sa_path.write_text(json.dumps(sa_info, indent=2))
+    except Exception:
+        pass  # will surface as a clear error when the pipeline actually runs
+
+_ensure_service_account()
+
 INCOMING_DIR  = PROJECT_ROOT / "data" / "incoming"
 REVIEW_DIR    = PROJECT_ROOT / "data" / "review_exports"
 REVIEWED_DIR  = PROJECT_ROOT / "data" / "reviewed"

@@ -14,8 +14,12 @@ from utilities.incident_id import format_incident_id
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-# Path to the service account JSON (located in project root)
-SERVICE_ACCOUNT_FILE = "service_account.json"
+# Path to the service account JSON.
+# Can be overridden by the GOOGLE_APPLICATION_CREDENTIALS env var.
+import os as _os
+SERVICE_ACCOUNT_FILE = _os.environ.get(
+    "GOOGLE_APPLICATION_CREDENTIALS", "service_account.json"
+)
 
 # Spreadsheet ID (long string in the Google Sheet URL)
 SPREADSHEET_ID = "1Z7zu2JLxOIU1yK3SrXIz8yN3a-2Kzd7d0g0-VNrkwaI"
