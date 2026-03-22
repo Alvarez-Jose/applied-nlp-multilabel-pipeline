@@ -637,6 +637,50 @@ def page_review():
 
     st.divider()
 
+    # --- Finalize to Incidents tab ---
+    st.subheader("Finalize to Incidents Tab")
+    st.caption(
+        "Transfers confirmed rows (review_status = 'reviewed') from the Review tab "
+        "into the clean Incidents tab, stripping all pipeline columns. "
+        "Run this after each merge to keep the Incidents tab up to date for the database."
+    )
+    fin_col1, fin_col2 = st.columns([2, 1])
+    with fin_col1:
+        fin_dry = st.checkbox("Dry run (preview only)", key="fin_dry")
+    with fin_col2:
+        fin_btn = st.button("Transfer to Incidents", type="primary")
+
+    for key, default in [("fin_log", None), ("fin_rc", None)]:
+        if key not in st.session_state:
+            st.session_state[key] = default
+
+    if fin_btn:
+        cmd = [PYTHON, "data_pipeline/finalize_incidents.py"]
+        if fin_dry:
+            cmd.append("--dry-run")
+        live_box = st.empty()
+        lines: list[str] = []
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, cwd=str(PROJECT_ROOT),
+        )
+        for line in proc.stdout:
+            lines.append(line)
+            live_box.code("".join(lines[-200:]), language="")
+        proc.wait()
+        st.session_state.fin_log = "".join(lines)
+        st.session_state.fin_rc  = proc.returncode
+        live_box.empty()
+
+    if st.session_state.fin_log is not None:
+        st.code(st.session_state.fin_log[-6000:], language="")
+        if st.session_state.fin_rc == 0:
+            st.success("Transfer complete." if not fin_dry else "Dry run complete.")
+        else:
+            st.error(f"Exit code {st.session_state.fin_rc}.")
+
+    st.divider()
+
     # --- Preview latest compact CSV ---
     if latest_compact:
         st.subheader("Batch Preview (first 50 rows)")

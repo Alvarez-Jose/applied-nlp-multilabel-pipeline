@@ -19,12 +19,12 @@ pyarrow>=16             # parquet export in export_training_data.py
 openpyxl>=3.1           # Excel read/write for reviewed sheets
 
 # ── ML — inference ────────────────────────────────────────────────────────────
+# CPU-only PyTorch index — keeps install small on Streamlit Cloud.
+# For local GPU use, install the CUDA build separately after pip install -r requirements.txt.
+--extra-index-url https://download.pytorch.org/whl/cpu
 scikit-learn>=1.5
 joblib>=1.4
-# CPU-only torch — keeps the install under Streamlit Cloud's size limit.
-# For GPU fine-tuning, install the CUDA build locally; the dashboard only
-# needs CPU inference for the baseline model.
-torch>=2.1,<2.6 --index-url https://download.pytorch.org/whl/cpu
+torch>=2.1,<2.6
 transformers>=4.41
 safetensors>=0.4
 sentencepiece>=0.2      # DeBERTa tokenizer
