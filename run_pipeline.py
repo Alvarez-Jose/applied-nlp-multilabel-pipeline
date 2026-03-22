@@ -62,8 +62,21 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+_log_dir = PROJECT_ROOT / "logs"
+_log_dir.mkdir(exist_ok=True)
+_log_file = _log_dir / f"pipeline_{_ts}.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(_log_file, encoding="utf-8"),
+    ],
+)
 log = logging.getLogger(__name__)
+log.info("Log file: %s", _log_file)
 
 PYTHON = sys.executable
 

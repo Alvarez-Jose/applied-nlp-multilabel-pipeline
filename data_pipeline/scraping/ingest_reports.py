@@ -6,6 +6,7 @@ import sys
 import traceback
 from datetime import date
 from typing import List, Dict, Any, Set
+from urllib.parse import urlparse, urlunparse
 import logging
 import asyncio
 
@@ -142,19 +143,37 @@ def article_to_report(article: Dict[str, Any], source_name: str) -> Report:
         raise
 
 
-def get_all_existing_urls() -> Set[str]:
-    """Get all URLs from Reports sheet once."""
-    ws = get_sheet(REPORTS_SHEET_NAME)
-    # Assuming URL is column D (4th column)
-    all_urls = ws.col_values(4)[1:]  # Skip header row
+def normalize_url(url: str) -> str:
+    """
+    Canonicalize a URL for deduplication:
+    - lowercase scheme and host
+    - strip trailing slashes from path
+    - drop fragment (#...)
+    - drop tracking query parameters (utm_*, ref, etc.)
+    """
+    try:
+        parsed = urlparse(url.strip())
+        scheme   = parsed.scheme.lower()
+        netloc   = parsed.netloc.lower()
+        path     = parsed.path.rstrip("/")
+        # Drop query string entirely — WAFA article identity is in the path
+        fragment = ""
+        return urlunparse((scheme, netloc, path, "", "", fragment))
+    except Exception:
+        return url.strip()
 
-    # Filter out None/empty values and ensure they're strings
+
+def get_all_existing_urls() -> Set[str]:
+    """Get all URLs from Reports sheet as a normalized set for deduplication."""
+    ws = get_sheet(REPORTS_SHEET_NAME)
+    all_urls = ws.col_values(4)[1:]  # Column D; skip header row
+
     url_set = set()
     for url in all_urls:
         if url is not None:
             url_str = str(url).strip()
-            if url_str:  # Only add non-empty strings
-                url_set.add(url_str)
+            if url_str:
+                url_set.add(normalize_url(url_str))
 
     return url_set
 
@@ -193,8 +212,9 @@ def filter_existing_reports(articles: List[Dict[str, Any]], source_name: str) ->
             error_count += 1
             continue
 
-        # Check for duplicates
-        if url_str in existing_urls:
+        # Normalize before deduplication check
+        url_norm = normalize_url(url_str)
+        if url_norm in existing_urls:
             logger.debug("[STAGE 3b] DUPLICATE: %s", url_str)
             duplicate_count += 1
             continue
@@ -204,7 +224,7 @@ def filter_existing_reports(articles: List[Dict[str, Any]], source_name: str) ->
             report = article_to_report(article, source_name)
             reports.append(report)
             new_count += 1
-            existing_urls.add(url_str)
+            existing_urls.add(url_norm)
         except Exception as e:
             logger.error(
                 "[STAGE 3c] article_to_report FAILED for %s:\n%s",
