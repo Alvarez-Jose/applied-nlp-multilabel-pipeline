@@ -16,9 +16,13 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # Path to the service account JSON.
 # Can be overridden by the GOOGLE_APPLICATION_CREDENTIALS env var.
+# Default resolves to the project root regardless of the calling directory.
 import os as _os
+from pathlib import Path as _Path
+_PROJECT_ROOT = _Path(__file__).resolve().parents[2]
 SERVICE_ACCOUNT_FILE = _os.environ.get(
-    "GOOGLE_APPLICATION_CREDENTIALS", "service_account.json"
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    str(_PROJECT_ROOT / "service_account.json"),
 )
 
 # Spreadsheet ID (long string in the Google Sheet URL)
