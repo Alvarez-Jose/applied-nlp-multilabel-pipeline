@@ -510,6 +510,9 @@ def page_review():
         with mc2:
             merge_btn = st.button("⬇  Merge from Sheets", type="primary")
         if merge_btn:
+            with st.spinner("Auto-saving checkpoint before merge…"):
+                auto_cp = _create_backup(label="auto-before-merge")
+            st.info(f"Auto-checkpoint saved: `{auto_cp.name}`")
             cmd = [
                 PYTHON, "modeling/merge_reviewed_labels.py",
                 "--from-sheets",
