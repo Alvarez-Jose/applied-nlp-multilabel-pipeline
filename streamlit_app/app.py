@@ -655,6 +655,124 @@ def page_review():
 
 
 # ---------------------------------------------------------------------------
+# Page: Export for Analysis
+# ---------------------------------------------------------------------------
+
+def page_export():
+    st.header("Export for Analysis")
+    st.caption(
+        "Exports the cleaned incident database to SPSS (.sav) and R-ready CSV "
+        "for use in SPSS, JASP, or R. Also writes a variable codebook CSV."
+    )
+
+    ANALYSIS_DIR = PROJECT_ROOT / "analysis"
+
+    # Persist log across reruns
+    for key, default in [("export_log", None), ("export_rc", None)]:
+        if key not in st.session_state:
+            st.session_state[key] = default
+
+    def _run_export(cmd: list):
+        st.session_state.export_log = None
+        st.session_state.export_rc = None
+        live_box = st.empty()
+        lines: list[str] = []
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=str(PROJECT_ROOT),
+        )
+        for line in proc.stdout:
+            lines.append(line)
+            live_box.code("".join(lines[-200:]), language="")
+        proc.wait()
+        st.session_state.export_log = "".join(lines)
+        st.session_state.export_rc = proc.returncode
+        live_box.empty()
+
+    # --- Options form ---
+    with st.form("export_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            years_input = st.text_input(
+                "Years to include",
+                value="2023 2024 2025",
+                help="Space-separated list, e.g. '2023 2024 2025'",
+            )
+            output_dir = st.text_input(
+                "Output directory",
+                value=str(ANALYSIS_DIR),
+                help="Relative or absolute path where files will be written",
+            )
+        with col2:
+            no_spss = st.checkbox(
+                "Skip SPSS export",
+                value=False,
+                help="Use this if pyreadstat is not installed",
+            )
+
+        submitted = st.form_submit_button("Export", type="primary")
+
+    if submitted:
+        years = years_input.strip().split()
+        cmd = [PYTHON, "data_pipeline/export_for_analysis.py", "--output-dir", output_dir]
+        if years:
+            cmd += ["--years"] + years
+        if no_spss:
+            cmd.append("--no-spss")
+        _run_export(cmd)
+
+    # --- Persistent output ---
+    if st.session_state.export_log is not None:
+        st.divider()
+        st.code(st.session_state.export_log[-6000:], language="")
+        if st.session_state.export_rc == 0:
+            st.success("Export complete.")
+        else:
+            st.error(f"Export failed (exit code {st.session_state.export_rc}).")
+
+    # --- Show existing exported files ---
+    st.divider()
+    st.subheader("Exported Files")
+
+    sav_files = sorted(ANALYSIS_DIR.glob("*.sav"), reverse=True) if ANALYSIS_DIR.exists() else []
+    csv_files = sorted(ANALYSIS_DIR.glob("Palestine_Violence_Archive*.csv"), reverse=True) if ANALYSIS_DIR.exists() else []
+    codebook  = ANALYSIS_DIR / "codebook_variables.csv"
+    r_script  = ANALYSIS_DIR / "descriptive_analysis.R"
+
+    if not sav_files and not csv_files:
+        st.info("No exported files yet. Click Export above to generate them.")
+    else:
+        for f in sav_files:
+            size_mb = round(f.stat().st_size / 1_048_576, 1)
+            st.markdown(f"**{f.name}** ({size_mb} MB) — SPSS / JASP")
+        for f in csv_files:
+            size_kb = round(f.stat().st_size / 1024, 0)
+            st.markdown(f"**{f.name}** ({size_kb} KB) — R / Excel")
+        if codebook.exists():
+            st.markdown(f"**{codebook.name}** — variable codebook")
+        if r_script.exists():
+            st.markdown(f"**{r_script.name}** — R analysis script (run in RStudio)")
+
+    st.divider()
+    st.subheader("How to open in SPSS / R")
+    st.code(
+        "# SPSS:\n"
+        "#   File > Open > Data > Palestine_Violence_Archive_2023_2024_2025.sav\n\n"
+        "# R:\n"
+        "library(haven)\n"
+        "df <- read_sav('analysis/Palestine_Violence_Archive_2023_2024_2025.sav')\n\n"
+        "# Or plain CSV:\n"
+        "df <- read.csv('analysis/Palestine_Violence_Archive_2023_2024_2025.csv')\n\n"
+        "# Run full descriptive analysis:\n"
+        "source('analysis/descriptive_analysis.R')",
+        language="r",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Page: Retrain
 # ---------------------------------------------------------------------------
 
@@ -816,10 +934,11 @@ def page_retrain():
 # ---------------------------------------------------------------------------
 
 PAGES = {
-    "📊 Dashboard":     page_dashboard,
-    "▶ Run Pipeline":   page_run,
-    "📋 Review Access": page_review,
-    "🔁 Retrain":       page_retrain,
+    "📊 Dashboard":        page_dashboard,
+    "▶ Run Pipeline":      page_run,
+    "📋 Review Access":    page_review,
+    "📤 Export Analysis":  page_export,
+    "🔁 Retrain":          page_retrain,
 }
 
 
