@@ -622,6 +622,7 @@ def format_compact_output(
     codebook: dict,
     model_name: str,
     run_ts: str,
+    overlap_pct: float = 0.05,
 ) -> pd.DataFrame:
     """
     Build the slim RA workflow sheet for day-to-day review.
@@ -699,6 +700,19 @@ def format_compact_output(
     out["reviewer_notes"] = ""
     out["review_status"]  = "pending"
     out["reviewed_by"]    = ""
+
+    # 8. Inter-rater reliability columns
+    # Randomly select overlap_pct of rows for double-review.
+    # These rows are reviewed independently by a second RA to measure agreement.
+    rng = np.random.default_rng(seed=42)
+    n_overlap = max(1, int(round(overlap_pct * n_docs))) if n_docs > 0 else 0
+    overlap_idx = set(rng.choice(n_docs, size=min(n_overlap, n_docs), replace=False).tolist())
+    out["double_review"] = [i in overlap_idx for i in range(n_docs)]
+
+    # Empty columns for the second rater (only meaningful on double_review=True rows)
+    for label in LABELS:
+        out[f"human2_{LABEL_SHORT[label]}"] = ""
+    out["reviewed_by_2"] = ""
 
     return out
 
@@ -914,6 +928,16 @@ def main() -> None:
             "Google Sheets 'Review' tab. Row IDs already present in Sheets are skipped."
         ),
     )
+    parser.add_argument(
+        "--overlap-pct",
+        type=float,
+        default=0.05,
+        help=(
+            "Fraction of rows to mark for double-review (inter-rater reliability). "
+            "These rows get a double_review=TRUE flag and empty human2_* columns "
+            "for a second rater. Default: 0.05 (5%%)."
+        ),
+    )
     args = parser.parse_args()
 
     input_path    = Path(args.input)
@@ -1006,6 +1030,7 @@ def main() -> None:
         input_df=input_df, probs=probs, preds=preds,
         flags_df=flags_df, conflicts=conflicts, codebook=codebook,
         model_name=args.model, run_ts=run_ts,
+        overlap_pct=args.overlap_pct,
     )
 
     # --- Export local files ---

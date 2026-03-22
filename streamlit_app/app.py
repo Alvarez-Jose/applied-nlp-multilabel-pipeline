@@ -345,6 +345,82 @@ def page_dashboard():
 
     st.divider()
 
+    # --- Inter-rater reliability ---
+    st.subheader("Inter-Rater Reliability")
+    irr_path = REVIEW_DIR / "irr_latest.json"
+    irr_col1, irr_col2 = st.columns([3, 1])
+    with irr_col1:
+        if irr_path.exists():
+            try:
+                irr = _load_meta(irr_path)
+                macro = irr.get("macro_kappa")
+                n_rows = irr.get("total_overlap_rows", 0)
+                n_eval = irr.get("n_labels_evaluated", 0)
+                mc_a, mc_b, mc_c = st.columns(3)
+                mc_a.metric(
+                    "Macro Kappa",
+                    f"{macro:.3f}" if macro is not None else "--",
+                    help="Average Cohen's Kappa across all labels. >0.61 is substantial agreement.",
+                )
+                mc_b.metric("Overlap rows", n_rows)
+                mc_c.metric("Labels evaluated", f"{n_eval} / 10")
+
+                per_label = irr.get("per_label", {})
+                if per_label:
+                    label_display = {
+                        "raid": "Raid", "arrest_detention": "Arrest/Detention",
+                        "physical_assault": "Physical Assault", "harm_to_property": "Harm to Property",
+                        "dispossession": "Dispossession", "religious_encroachment": "Religious Encroachment",
+                        "restriction_of_freedoms": "Restriction of Freedoms",
+                        "coercive_actions": "Coercive Actions", "protest": "Protest",
+                        "multi_community_incident": "Multi-Community",
+                    }
+                    irr_rows = []
+                    for short, stats in per_label.items():
+                        kappa = stats.get("kappa")
+                        irr_rows.append({
+                            "Label":       label_display.get(short, short),
+                            "Pairs":       stats.get("n_pairs", 0),
+                            "% Agreement": f"{stats['pct_agreement']*100:.1f}%" if stats.get("pct_agreement") is not None else "--",
+                            "Kappa":       f"{kappa:.3f}" if kappa is not None else "--",
+                        })
+                    st.dataframe(pd.DataFrame(irr_rows), use_container_width=True, hide_index=True)
+            except Exception as e:
+                st.warning(f"Could not load IRR summary: {e}")
+        else:
+            st.info("No IRR data yet. Run compute_irr.py after RAs complete double-review rows.")
+
+    with irr_col2:
+        st.write("")
+        st.write("")
+        if st.button("Compute IRR"):
+            for key, default in [("irr_log", None), ("irr_rc", None)]:
+                if key not in st.session_state:
+                    st.session_state[key] = default
+            live_box = st.empty()
+            lines: list[str] = []
+            proc = subprocess.Popen(
+                [PYTHON, "modeling/compute_irr.py", "--from-sheets"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, cwd=str(PROJECT_ROOT),
+            )
+            for line in proc.stdout:
+                lines.append(line)
+                live_box.code("".join(lines[-100:]), language="")
+            proc.wait()
+            st.session_state.irr_log = "".join(lines)
+            st.session_state.irr_rc  = proc.returncode
+            live_box.empty()
+
+        if st.session_state.get("irr_log"):
+            st.code(st.session_state.irr_log[-3000:], language="")
+            if st.session_state.irr_rc == 0:
+                st.success("Done.")
+            else:
+                st.error(f"Exit {st.session_state.irr_rc}.")
+
+    st.divider()
+
     # --- Recent exports table ---
     st.subheader("Recent Review Exports")
     if REVIEW_DIR.exists():
