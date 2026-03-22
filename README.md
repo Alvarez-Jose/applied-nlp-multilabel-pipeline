@@ -1,6 +1,6 @@
 # Palestine Violence Archive — Lab Pipeline
 
-A research pipeline for documenting, classifying, and archiving incidents of violence against Palestinians in the West Bank. Scraped news articles are automatically labeled with event type categories using a trained multilabel classifier, then routed to research assistants for human review. Corrected labels feed back into model retraining.
+A research pipeline for documenting, classifying, and archiving incidents of violence against Palestinians in the West Bank. Scraped news articles are automatically labeled with event type categories using a trained multilabel classifier, then routed to research assistants for human review. Corrected labels feed back into model retraining and are finalized into a clean publication-ready database.
 
 ---
 
@@ -11,33 +11,51 @@ A research pipeline for documenting, classifying, and archiving incidents of vio
 - [Setup](#setup)
 - [Running the Pipeline](#running-the-pipeline)
 - [RA Review Workflow](#ra-review-workflow)
+- [Finalizing to the Incidents Tab](#finalizing-to-the-incidents-tab)
 - [Label Definitions](#label-definitions)
 - [Model Details](#model-details)
 - [Streamlit Dashboard](#streamlit-dashboard)
 - [Retraining](#retraining)
+- [Export for Statistical Analysis](#export-for-statistical-analysis)
 
 ---
 
 ## Project Overview
 
-The pipeline operates as a continuous loop:
+The pipeline operates as a seven-step loop:
 
 ```
-WAFA news site
-    -> scrape articles
-    -> push to Google Sheets (Reports tab)
-    -> export to CSV
-    -> run multilabel classifier (baseline or DeBERTa)
-    -> flag uncertain predictions
-    -> research assistants review in Google Sheets
-    -> merge corrections into training data
-    -> retrain model
-    -> repeat
+1. Scrape WAFA articles
+       |
+       v
+2. Push to Google Sheets (Reports tab)
+       |
+       v
+3. Export to local batch CSV (data/incoming/)
+       |
+       v
+4. Run multilabel classifier (baseline or DeBERTa)
+       |
+       v
+5. Push predictions to Google Sheets (Review tab)
+       |
+       v
+6. Research assistants review and correct labels in Sheets
+       |
+       v
+7. Finalize confirmed records to Incidents tab (publication layer)
+       |
+       +----> retrain model and repeat
 ```
 
 **What gets classified:** Each article is assigned zero or more of 10 binary event-type labels (raid, arrest, physical assault, etc.) according to a structured codebook. The codebook defines precise inclusion/exclusion criteria and is stored in `config/label_codebook.yaml`.
 
-**Who uses this:** A small research team. The pipeline scripts run locally. Research assistants access predictions through Google Sheets for review. The Streamlit dashboard provides a status overview.
+**Google Sheets structure:**
+- **Reports** — scraped articles written by the ingestion pipeline
+- **Review** — model predictions awaiting RA review (69 columns: metadata, predictions, confidence scores, uncertainty flags, human override columns, workflow columns)
+- **Incidents** — finalized, clean records promoted from Review after human confirmation; this is the publication-layer database
+
+**Who uses this:** A small research team. The pipeline scripts run locally or via the Streamlit dashboard hosted on Streamlit Cloud. Research assistants access predictions through Google Sheets.
 
 ---
 
@@ -46,8 +64,9 @@ WAFA news site
 ```
 palestine-violence-archive/
 |
-|- run_pipeline.py                         # Master orchestrator -- run this first
-|- requirements.txt                        # Python dependencies
+|- run_pipeline.py                         # Master orchestrator
+|- requirements.txt                        # Core Python dependencies (no GPU libs)
+|- requirements-gpu.txt                    # DeBERTa / GPU dependencies (local use only)
 |- config/
 |   |- label_codebook.yaml                # Codebook: 10 label definitions + constraints
 |
@@ -63,8 +82,9 @@ palestine-violence-archive/
 |   |   |- deduplicate_events.py          # Event-level deduplication
 |   |- export_reports_to_incoming.py      # Sheets Reports tab -> batch CSV
 |   |- export_sheets_to_csv.py            # Sheets Incidents tab -> training CSV
+|   |- export_for_analysis.py             # Export to SPSS (.sav) and R (.rds) formats
+|   |- finalize_incidents.py              # Promote reviewed rows -> Incidents tab
 |   |- normalize_raw.py                   # Normalize raw RA-coded CSVs (2023-2025)
-|   |- convert_oppression_db_to_incidents.py  # Generate rich descriptions from fields
 |   |- codebook.py                        # Controlled vocabularies (governorates, etc.)
 |
 |- modeling/
@@ -72,27 +92,33 @@ palestine-violence-archive/
 |   |- merge_reviewed_labels.py           # Merge RA corrections into training data
 |   |- make_splits.py                     # Train/val/test split
 |   |- training/
-|   |   |- export_training_data.py        # Consolidate all sources into training CSV
 |   |   |- train_baseline_multilabel.py   # TF-IDF + LogisticRegression training
 |   |   |- train_transformer_multilabel.py # DeBERTa v3 fine-tuning
 |   |- saved_models/
 |       |- baseline_rank_based_fixed/     # Baseline model artifacts (pkl + meta)
 |       |- deberta_v3_multilabel/         # DeBERTa artifacts (meta JSON; weights on HF Hub)
 |
+|- analysis/
+|   |- descriptive_analysis.R             # R script for descriptive stats
+|   |- compute_irr.py                     # Inter-rater reliability (Cohen's kappa)
+|
 |- streamlit_app/
-|   |- app.py                             # Dashboard UI
-|   |- requirements.txt                   # Streamlit-only deps (for Cloud deployment)
+|   |- app.py                             # Dashboard UI (deployed on Streamlit Cloud)
+|
+|- docs/
+|   |- generate_dashboard_guide.py        # Regenerate the PDF user guide
+|   |- Dashboard_User_Guide.pdf           # Current PDF guide (auto-generated)
 |
 |- utilities/
-|   |- date_utils.py                      # Date parsing
-|   |- text_utils.py                      # Text cleaning and extraction
-|   |- validators.py                      # Field validators
+|   |- date_utils.py
+|   |- text_utils.py
+|   |- validators.py
 |   |- incident_id.py                     # ID formatting (GOV-YYYYMMDD-NN)
-|   |- timezone_conversion.py             # Palestine timezone (Asia/Hebron)
+|   |- timezone_conversion.py
+|
+|- check_sheets_structure.py              # Diagnostic: print Sheets tab headers + row counts
 |
 |- data/
-    |- raw/                               # Original RA-coded Excel files (2023-2025)
-    |- processed/                         # Normalized CSVs
     |- incoming/                          # Batch CSVs awaiting model prediction
     |- review_exports/                    # Model output: review sheets + predictions
     |- reviewed/                          # RA-corrected files ready for merge
@@ -106,26 +132,45 @@ palestine-violence-archive/
 ### 1. Python environment
 
 ```bash
+# Core dependencies (scraping, Sheets, dashboard, baseline model):
 pip install -r requirements.txt
 
-# Playwright (for JavaScript-heavy scraping, if needed):
-playwright install chromium
+# DeBERTa and GPU support (local inference only; not needed for Streamlit Cloud):
+pip install -r requirements-gpu.txt
+
+# For CUDA (GPU acceleration):
+pip install -r requirements-gpu.txt --index-url https://download.pytorch.org/whl/cu121
 ```
 
-Tested on Python 3.11. The conda environment used in development is `ml_nlp_env311`.
+Tested on Python 3.11.
 
 ### 2. Google Sheets credentials
 
-The pipeline reads and writes to a shared Google Spreadsheet. Authentication uses a service account.
+The pipeline reads and writes to a shared Google Spreadsheet using a service account.
 
-- Place `service_account.json` in the project root (this file is gitignored)
+**Local use:**
+- Place `service_account.json` in the project root (gitignored)
 - The spreadsheet ID is hardcoded in `data_pipeline/database/sheets_interface.py`
 - The service account must have Editor access to the spreadsheet
+- Alternatively, set `GOOGLE_APPLICATION_CREDENTIALS=/path/to/service_account.json`
 
-The spreadsheet has three tabs:
-- **Reports** -- scraped articles (written by the scraper)
-- **Incidents** -- manually coded events (written by RAs)
-- **Review** -- model predictions for RA review (written by the pipeline)
+**Streamlit Cloud deployment:**
+- Do not commit `service_account.json` — it is gitignored
+- Instead, paste the service account JSON into Streamlit Cloud Secrets (App Settings > Secrets) in TOML format:
+
+```toml
+[gcp_service_account]
+type = "service_account"
+project_id = "your-project-id"
+private_key_id = "..."
+private_key = "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
+client_email = "..."
+client_id = "..."
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+```
+
+The dashboard writes these credentials to `service_account.json` on startup automatically.
 
 ### 3. DeBERTa model weights
 
@@ -136,7 +181,7 @@ huggingface-cli login
 # Enter token when prompted
 ```
 
-Or set the environment variable `HF_TOKEN` before running.
+Or set the environment variable `HF_TOKEN` before running. DeBERTa is not available on Streamlit Cloud (weights too large); use the baseline model for cloud runs.
 
 The baseline TF-IDF model is stored locally in `modeling/saved_models/baseline_rank_based_fixed/` and tracked via Git LFS.
 
@@ -193,15 +238,19 @@ python modeling/predict_and_prepare_review.py \
     --input data/incoming/batch_20250321_120000.csv \
     --model baseline
 
-# Merge reviewed labels from local file:
-python modeling/merge_reviewed_labels.py \
-    --reviewed data/reviewed/reviewed_20250321.xlsx \
-    --predictions data/review_exports/predictions_20250321_120000.csv
-
 # Merge reviewed labels from Google Sheets:
 python modeling/merge_reviewed_labels.py \
     --from-sheets \
     --predictions data/review_exports/predictions_20250321_120000.csv
+
+# Promote confirmed records from Review tab to Incidents tab:
+python data_pipeline/finalize_incidents.py
+
+# Dry-run finalization (preview without writing):
+python data_pipeline/finalize_incidents.py --dry-run
+
+# Diagnose Sheets structure (tab names, headers, row counts):
+python check_sheets_structure.py
 ```
 
 ---
@@ -210,24 +259,24 @@ python modeling/merge_reviewed_labels.py \
 
 After the pipeline runs, research assistants review model predictions in Google Sheets.
 
-**Step 1 -- Open the Review tab**
+**Step 1 — Open the Review tab**
 
 Navigate to the shared Google Spreadsheet and open the **Review** tab. New rows will have been pushed by the pipeline.
 
-**Step 2 -- Fill in human labels**
+**Step 2 — Fill in human labels**
 
-For each row where `needs_review = TRUE`, fill in the `human_{label}` columns:
+For each row, fill in the `human_{label}` columns:
 - `1` if the event type applies
 - `0` if it does not
-- Leave blank to accept the model prediction
+- Leave blank to accept the model prediction as-is
 
-Pay attention to the `codebook_conflict` column -- it flags label combinations that may be inconsistent with the codebook.
+Rows where `needs_review = TRUE` have uncertain confidence or a rare label predicted — prioritize these. The `codebook_conflict` column flags label combinations that may be inconsistent with the codebook.
 
-**Step 3 -- Mark as reviewed**
+**Step 3 — Mark as reviewed**
 
 Set `review_status = reviewed` when a row is complete. Add any notes to `reviewer_notes`.
 
-**Step 4 -- Merge labels back into training data**
+**Step 4 — Merge labels back into training data**
 
 Once a batch is reviewed, a lab admin runs:
 
@@ -237,7 +286,29 @@ python modeling/merge_reviewed_labels.py \
     --predictions data/review_exports/predictions_{timestamp}.csv
 ```
 
-This pulls all `review_status = reviewed` rows from Sheets and merges human labels into the training dataset.
+---
+
+## Finalizing to the Incidents Tab
+
+The **Incidents tab** is the publication-layer database. It holds clean, human-confirmed records stripped of all pipeline internals (no `pred_*`, `conf_*`, or flag columns).
+
+After RAs have reviewed a batch, promote confirmed records:
+
+```bash
+# Dry-run to preview what will be written:
+python data_pipeline/finalize_incidents.py --dry-run
+
+# Write confirmed records to Incidents tab:
+python data_pipeline/finalize_incidents.py
+```
+
+The script:
+- Reads all rows with `review_status = reviewed` from the Review tab
+- Resolves each label: uses `human_{label}` if filled; falls back to `pred_{label}`
+- Strips all pipeline columns; writes only clean incident fields to Incidents tab
+- Skips rows that are already present (idempotent)
+
+The Incidents tab can also be triggered from the Streamlit dashboard (Retrain page > Finalize to Incidents Tab section).
 
 ---
 
@@ -258,7 +329,7 @@ The classifier predicts 10 binary labels per incident. Full definitions, inclusi
 | `protest_y` | Organized Palestinian protests or civil resistance | 3.6% |
 | `multi_community_incident_y` | Incident spanning multiple communities simultaneously | 8.8% |
 
-Labels marked with low prevalence (`religious_encroachment_y`, `protest_y`) are always flagged for human review when predicted positive, regardless of model confidence.
+Labels with low training prevalence (`religious_encroachment_y`, `protest_y`) are always flagged for human review when predicted positive, regardless of model confidence.
 
 ---
 
@@ -268,7 +339,7 @@ Labels marked with low prevalence (`religious_encroachment_y`, `protest_y`) are 
 
 - Input: TF-IDF vectors (unigrams to trigrams, 10k features) built from description + structured metadata fields
 - One binary LogisticRegression classifier per label (MultiOutputClassifier)
-- Thresholding: rank-based -- the top-k documents by predicted probability are marked positive, where k is calibrated to match the training prevalence of each label
+- Thresholding: rank-based — the top-k documents by predicted probability are marked positive, where k is calibrated to match the training prevalence of each label
 - Artifacts: `modeling/saved_models/baseline_rank_based_fixed/`
 
 ### DeBERTa v3
@@ -287,21 +358,30 @@ A prediction is flagged for human review if the model's confidence score is with
 
 ## Streamlit Dashboard
 
-A lightweight dashboard for monitoring pipeline status and triggering runs.
+A dashboard for monitoring pipeline status, triggering runs, and managing review.
 
 ```bash
 streamlit run streamlit_app/app.py
 ```
 
-Pages:
-- **Dashboard** -- batch counts, flagged doc counts, baseline vs DeBERTa metrics
-- **Run Pipeline** -- form to trigger any pipeline configuration; output streams live
-- **Review Access** -- link to Google Sheets Review tab; merge-from-Sheets button
-- **Retrain** -- per-label metrics table; checkpoint save/restore; retrain button
+Hosted on Streamlit Cloud. Pages:
+
+- **Dashboard** — batch counts, flagged doc counts, baseline vs DeBERTa metrics
+- **Run Pipeline** — form to trigger any pipeline configuration; output streams live
+- **Review Access** — link to Google Sheets Review tab; merge-from-Sheets button
+- **Export Analysis** — export the Incidents tab to SPSS (.sav) or R (.rds) for statistical analysis
+- **Retrain** — per-label metrics table; checkpoint save/restore; retrain button; finalize-to-Incidents section
+- **Documentation** — full inline user guide with PDF download
 
 ### Version checkpoints
 
-The Retrain page automatically saves a checkpoint of the current model artifacts before every retrain or merge operation. Checkpoints are stored in `modeling/backups/` (gitignored) and can be restored with one click if a model is accidentally overwritten.
+The Retrain page automatically saves a checkpoint of the current model artifacts before every retrain or merge operation. Checkpoints are stored in `modeling/backups/` (gitignored) and can be restored with one click.
+
+### Streamlit Cloud deployment notes
+
+- `requirements.txt` is used for all dependencies. GPU libraries (`torch`, `transformers`) are in `requirements-gpu.txt` only and not installed on Streamlit Cloud.
+- Service account credentials must be added via Streamlit Cloud Secrets (see [Setup](#2-google-sheets-credentials)).
+- The baseline model runs fine on Cloud. DeBERTa inference requires local/GPU setup.
 
 ---
 
@@ -314,15 +394,12 @@ Retraining should happen after enough reviewed batches have accumulated (recomme
 python modeling/merge_reviewed_labels.py --from-sheets \
     --predictions data/review_exports/predictions_{timestamp}.csv
 
-# 2. Rebuild consolidated training dataset:
-python modeling/training/export_training_data.py
-
-# 3. Retrain baseline:
+# 2. Retrain baseline:
 python modeling/training/train_baseline_multilabel.py
 
-# 4. Evaluate: compare new baseline_meta.json against the previous checkpoint
+# 3. Evaluate: compare new baseline_meta.json against the previous checkpoint
 
-# 5. If metrics hold, retrain DeBERTa:
+# 4. If metrics hold, retrain DeBERTa (local/GPU only):
 python modeling/training/train_transformer_multilabel.py
 ```
 
@@ -334,10 +411,27 @@ python run_pipeline.py --retrain-only
 
 ---
 
+## Export for Statistical Analysis
+
+The Incidents tab can be exported to formats suitable for statistical analysis:
+
+```bash
+# Export to SPSS and R formats:
+python data_pipeline/export_for_analysis.py
+
+# Or from the dashboard: Export Analysis page
+```
+
+Outputs:
+- `incidents.sav` — SPSS format (via `pyreadstat`)
+- `incidents.rds` — R data frame (via `rpy2`, requires R installed)
+
+---
+
 ## Data Sources
 
 Currently ingesting:
-- **WAFA** (Wafa News Agency) -- English-language articles filtered to West Bank region
+- **WAFA** (Wafa News Agency) — English-language articles filtered to West Bank region
 
 Planned (not yet implemented):
 - B'Tselem
@@ -347,8 +441,9 @@ Planned (not yet implemented):
 
 ## Notes for Developers
 
-- All scripts resolve paths relative to `PROJECT_ROOT = Path(__file__).resolve().parent` -- do not rely on the current working directory
+- All scripts resolve paths relative to `PROJECT_ROOT = Path(__file__).resolve().parent` — do not rely on the current working directory
 - Google Sheets ID is hardcoded in `data_pipeline/database/sheets_interface.py`
-- `service_account.json` must be in the project root and is gitignored
+- `service_account.json` must be in the project root and is gitignored; on Streamlit Cloud it is written from secrets at startup
 - Pipeline logs are written to `logs/pipeline_{timestamp}.log` in addition to stdout
 - Large model files use Git LFS; DeBERTa weights are excluded from git entirely and hosted on HF Hub
+- To regenerate the PDF user guide: `python docs/generate_dashboard_guide.py`

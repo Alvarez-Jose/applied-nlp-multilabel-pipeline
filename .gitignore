@@ -1,5 +1,6 @@
 service_account.json
-logs/
+logs/*
+!logs/.gitkeep
 __pycache__/
 *.pyc
 .vscode/
