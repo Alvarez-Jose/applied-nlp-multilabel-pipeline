@@ -2,3 +2,15 @@ service_account.json
 __pycache__/
 *.pyc
 .vscode/
+.claude/
+review_output/
+
+# Lab workflow directories — track folder structure (.gitkeep) but not content
+data/incoming/*
+!data/incoming/.gitkeep
+data/review_exports/*
+!data/review_exports/.gitkeep
+data/reviewed/*
+!data/reviewed/.gitkeep
+data/training/*
+!data/training/.gitkeep

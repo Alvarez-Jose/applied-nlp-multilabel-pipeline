@@ -7,6 +7,7 @@ from datetime import date
 from typing import List, Dict, Optional, Set
 
 import gspread
+import pandas as pd
 
 from data_pipeline.database.models import Report
 from utilities.incident_id import format_incident_id
@@ -20,7 +21,8 @@ SERVICE_ACCOUNT_FILE = "service_account.json"
 SPREADSHEET_ID = "1Z7zu2JLxOIU1yK3SrXIz8yN3a-2Kzd7d0g0-VNrkwaI"
 
 INCIDENTS_SHEET_NAME = "Incidents"
-REPORTS_SHEET_NAME = "Reports"
+REPORTS_SHEET_NAME   = "Reports"
+REVIEW_SHEET_NAME    = "Review"
 
 # Maximum retries for ID collision
 MAX_ID_RETRIES = 5
@@ -43,10 +45,31 @@ def get_sheet(sheet_name: str):
 
 
 def list_incidents() -> List[Dict]:
-    """Return all incidents as a list of dicts. Assumes row 1 is header in the 'Incidents' sheet."""
+    """
+    Return all incidents as a list of dicts using the Incidents sheet header row.
+
+    Uses get_all_values() instead of get_all_records() so that duplicate column
+    headers in the sheet do not raise an error. Duplicate headers are suffixed
+    with _2, _3, etc. to keep all columns accessible.
+    """
     ws = get_sheet(INCIDENTS_SHEET_NAME)
-    rows = ws.get_all_records()  # list[dict] with keys from header row
-    return rows
+    all_values = ws.get_all_values()
+    if not all_values:
+        return []
+
+    # Deduplicate headers: if a name appears more than once, suffix later copies
+    raw_headers = all_values[0]
+    headers = []
+    seen: Dict[str, int] = {}
+    for h in raw_headers:
+        if h in seen:
+            seen[h] += 1
+            headers.append(f"{h}_{seen[h]}")
+        else:
+            seen[h] = 1
+            headers.append(h)
+
+    return [dict(zip(headers, row)) for row in all_values[1:]]
 
 
 def report_url_exists(url: str) -> bool:
@@ -279,3 +302,81 @@ def add_reports(reports: List[Report]) -> None:
 
     # Append all rows in one API call
     ws.append_rows(rows_to_append, value_input_option=ValueInputOption.raw)
+
+
+def push_review_batch(df: pd.DataFrame) -> int:
+    """
+    Append new prediction rows to the 'Review' sheet, skipping row_ids already present.
+
+    If the sheet is empty, writes column headers first (taken from df.columns).
+    If the sheet already has rows, columns are aligned to the existing headers;
+    DataFrame columns not in the sheet are dropped; sheet columns not in the
+    DataFrame are written as empty strings.
+
+    Returns the number of rows actually appended (0 if all already present).
+    """
+    ws = get_sheet(REVIEW_SHEET_NAME)
+    all_values = ws.get_all_values()
+
+    if not all_values:
+        # Empty sheet — write header row first
+        headers = list(df.columns)
+        ws.append_row(headers, value_input_option=ValueInputOption.raw)
+        existing_row_ids: Set[str] = set()
+    else:
+        headers = all_values[0]
+        try:
+            rid_idx = headers.index("row_id")
+            existing_row_ids = {
+                row[rid_idx]
+                for row in all_values[1:]
+                if len(row) > rid_idx and row[rid_idx]
+            }
+        except ValueError:
+            existing_row_ids = set()
+
+    # Drop rows already in the sheet
+    if "row_id" in df.columns:
+        new_df = df[~df["row_id"].astype(str).isin(existing_row_ids)].copy()
+    else:
+        new_df = df.copy()
+
+    if new_df.empty:
+        return 0
+
+    # Build rows aligned to sheet header order
+    rows: List[List] = []
+    for _, row in new_df.iterrows():
+        row_data = []
+        for h in headers:
+            val = row.get(h, "")
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                val = ""
+            row_data.append(str(val))
+        rows.append(row_data)
+
+    ws.append_rows(rows, value_input_option=ValueInputOption.raw)
+    return len(rows)
+
+
+def get_reviewed_rows() -> pd.DataFrame:
+    """
+    Read all rows from the 'Review' sheet where review_status == 'reviewed'.
+
+    Returns a pandas DataFrame containing only those rows.
+    Returns an empty DataFrame if the sheet is empty or has no reviewed rows.
+    """
+    ws = get_sheet(REVIEW_SHEET_NAME)
+    all_values = ws.get_all_values()
+
+    if len(all_values) < 2:
+        return pd.DataFrame()
+
+    headers = all_values[0]
+    df = pd.DataFrame(all_values[1:], columns=headers).replace("", None)
+
+    if "review_status" not in df.columns:
+        return pd.DataFrame()
+
+    mask = df["review_status"].fillna("").str.strip().str.lower() == "reviewed"
+    return df[mask].reset_index(drop=True)

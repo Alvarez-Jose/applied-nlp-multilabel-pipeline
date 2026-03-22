@@ -1,0 +1,330 @@
+# config/label_codebook.yaml
+#
+# Semantic codebook for the Oppression Database multilabel classifier.
+# Each label entry provides the definition, inclusion/exclusion criteria,
+# examples, prevalence statistics, and soft codebook constraints used by
+# predict_and_prepare_review.py to flag ambiguous predictions for human review.
+#
+# Format version: 1.0
+# For controlled vocabularies (governorates, perpetrators, etc.) see data_pipeline/codebook.py
+
+metadata:
+  version: "1.0"
+  project: "Oppression Database"
+  created: "2026-03-21"
+  description: >
+    Coding manual definitions for the 10 binary event labels used in the
+    Palestine Violence Archive multilabel classification system.
+    Train prevalences are from the 2023-2024 training split (3312 rows).
+
+labels:
+
+  raid_y:
+    name: "Raid"
+    model_column: "raid_y"
+    definition: >
+      An organized incursion by Israeli military forces or police into a Palestinian
+      residential or commercial area. Raids involve entering or surrounding a location,
+      typically to arrest individuals, search properties, or impose a show of force.
+      Settler-only attacks do not qualify unless coordinated with military.
+    inclusion_criteria:
+      - "Israeli military or police enters residential neighborhoods, refugee camps, towns, or villages"
+      - "Surrounding or cordoning off of an area with military forces"
+      - "Night-time or daytime forced entry into homes, businesses, or institutions"
+      - "House searches, even without resulting arrests"
+      - "Incursion into Palestinian territory from settlements with military escort"
+    exclusion_criteria:
+      - "Permanent checkpoints or static roadblocks (code as restriction_of_freedoms_y)"
+      - "Settler attacks without military coordination (code as coercive_actions_y or physical_assault_y)"
+      - "Aerial strikes or remote attacks without ground entry (code as physical_assault_y)"
+    examples:
+      - "Israeli forces stormed the Jenin refugee camp, conducting house-to-house searches"
+      - "Dozens of Israeli soldiers raided the village of Beita at dawn, breaking into several homes"
+    prevalence_train: 0.545
+    is_rare: false
+    typical_co_labels:
+      - arrest_detention_y
+      - physical_assault_y
+      - coercive_actions_y
+    constraints:
+      - description: >
+          Raid predicted without arrest/detention or coercive actions — raids typically
+          involve at least one of these. Verify the description does not mention searches,
+          interrogations, or detentions that may have been missed.
+        flag_if_predicted:
+          raid_y: 1
+          arrest_detention_y: 0
+          coercive_actions_y: 0
+
+  arrest_detention_y:
+    name: "Arrest/Detention"
+    model_column: "arrest_detention_y"
+    definition: >
+      Apprehension, detention, or imprisonment of Palestinians by Israeli forces or
+      the Palestinian Authority, including arrests during raids, at checkpoints, or
+      through administrative detention orders. Includes both formal arrests and
+      informal detention (e.g., held for questioning and released).
+    inclusion_criteria:
+      - "Physical apprehension of individuals by soldiers, police, or border forces"
+      - "Administrative detention without charge or trial"
+      - "Detention at checkpoints, even if subsequently released"
+      - "Summons to interrogation resulting in detention"
+      - "Arrests of minors"
+      - "Mass arrest of community members during a raid"
+    exclusion_criteria:
+      - "Verbal summons or orders to appear, without resulting detention"
+      - "Deportation or transfer orders not yet executed"
+      - "Interrogation without physical apprehension"
+    examples:
+      - "Israeli forces arrested 5 Palestinians during the raid, including a minor"
+      - "A Palestinian was detained at the Qalandia checkpoint for several hours before being released"
+    prevalence_train: 0.383
+    is_rare: false
+    typical_co_labels:
+      - raid_y
+      - coercive_actions_y
+    constraints:
+      - description: >
+          Arrest/detention predicted without a raid or coercive actions context —
+          arrests without a raid or intimidation component are less common. Verify
+          whether the event involves a checkpoint, patrol, or administrative order
+          that was not captured by other labels.
+        flag_if_predicted:
+          arrest_detention_y: 1
+          raid_y: 0
+          coercive_actions_y: 0
+
+  physical_assault_y:
+    name: "Physical Assault"
+    model_column: "physical_assault_y"
+    definition: >
+      Direct use of physical force or violence against Palestinian individuals or groups
+      by Israeli forces or settlers. Includes all forms of bodily harm or the use of
+      weapons and chemical agents causing injury or risk of injury.
+    inclusion_criteria:
+      - "Shooting with live ammunition or rubber-coated steel bullets"
+      - "Physical beating, punching, or kicking by soldiers or settlers"
+      - "Tear gas or pepper spray deployment targeting individuals or crowds"
+      - "Stun grenade deployment causing injury or dispersal"
+      - "Use of attack dogs on individuals"
+      - "Vehicular ramming or deliberate driving toward pedestrians"
+      - "Stone-throwing by settlers at Palestinian individuals or vehicles"
+      - "Using Palestinians as human shields"
+    exclusion_criteria:
+      - "Verbal threats or intimidation without physical contact (code as coercive_actions_y)"
+      - "Confiscation of property without accompanying violence"
+      - "Psychological pressure not involving physical harm"
+    examples:
+      - "Settlers attacked Palestinian farmers with iron rods, injuring two"
+      - "Israeli soldiers opened fire on a group of protesters, wounding three"
+    prevalence_train: 0.384
+    is_rare: false
+    typical_co_labels:
+      - raid_y
+      - coercive_actions_y
+      - harm_to_property_y
+    constraints: []
+
+  harm_to_property_y:
+    name: "Harm to Property"
+    model_column: "harm_to_property_y"
+    definition: >
+      Intentional damage or destruction of Palestinian-owned property by Israeli forces
+      or settlers. Includes vandalism (minor damage) and destruction (major or total loss).
+      Does not include taking or appropriating property (see dispossession_y).
+    inclusion_criteria:
+      - "Vandalism: graffiti, slashed tires, broken windows, keyed cars"
+      - "Destruction: demolition orders executed, homes bulldozed or blown up"
+      - "Burning: crops, vehicles, buildings, agricultural equipment set on fire"
+      - "Uprooting or cutting down olive trees or other agricultural assets"
+      - "Flooding or contaminating water sources or land"
+    exclusion_criteria:
+      - "Confiscation or appropriation of property without physical damage (code as dispossession_y)"
+      - "Blocking access to property without physical damage (code as restriction_of_freedoms_y)"
+      - "Threatened demolition not yet executed (code as coercive_actions_y)"
+    examples:
+      - "Settlers vandalized parked vehicles and wrote graffiti on walls of a Palestinian home"
+      - "Israeli forces demolished a Palestinian family's home in Hebron"
+      - "Settlers uprooted 200 olive trees belonging to farmers in Nablus governorate"
+    prevalence_train: 0.299
+    is_rare: false
+    typical_co_labels:
+      - dispossession_y
+      - physical_assault_y
+      - coercive_actions_y
+    constraints:
+      - description: >
+          Dispossession predicted without harm to property — these labels often co-occur
+          when property is taken after being damaged. Verify whether theft/seizure occurred
+          without accompanying physical damage (valid) or whether harm to property was missed.
+        flag_if_predicted:
+          dispossession_y: 1
+          harm_to_property_y: 0
+
+  dispossession_y:
+    name: "Dispossession"
+    model_column: "dispossession_y"
+    definition: >
+      Taking, seizing, requisitioning, or permanently or temporarily appropriating
+      Palestinian land, livestock, produce, or personal property. Includes actions
+      that deprive Palestinians of use or ownership of assets, even without physical
+      damage to those assets.
+    inclusion_criteria:
+      - "Land confiscation or formal requisition orders for military or settlement use"
+      - "Theft of agricultural produce (olives, crops, harvests)"
+      - "Theft or seizure of vehicles, personal belongings, or equipment"
+      - "Killing or confiscating livestock"
+      - "Temporary requisition of buildings for military use"
+    exclusion_criteria:
+      - "Physical damage to property not resulting in permanent loss (code as harm_to_property_y)"
+      - "Blocking access to land without seizure (code as restriction_of_freedoms_y)"
+      - "Demolition orders not yet resulting in land seizure"
+    examples:
+      - "Israeli settlers stole sheep from Palestinian herders in the Jordan Valley"
+      - "Israeli authorities issued a confiscation order for 50 dunams of agricultural land"
+    prevalence_train: 0.077
+    is_rare: false
+    typical_co_labels:
+      - harm_to_property_y
+      - coercive_actions_y
+    constraints: []
+
+  religious_encroachment_y:
+    name: "Religious Encroachment"
+    model_column: "religious_encroachment_y"
+    definition: >
+      Incursions into, desecration of, or interference with Palestinian religious sites,
+      practices, or observances. Includes mosques, churches, cemeteries, and religious
+      gatherings. This is a rare label — any positive prediction should be carefully verified.
+    inclusion_criteria:
+      - "Israeli forces or settlers entering or storming mosques, churches, or shrines"
+      - "Desecration of religious artifacts, prayer spaces, or cemeteries"
+      - "Blocking Palestinians from reaching religious sites (Al-Aqsa, churches)"
+      - "Interference with Friday prayers, Eid gatherings, or Christian holy day observances"
+      - "Settlers conducting religious rituals in Palestinian religious spaces"
+      - "Damage to mosques, minarets, or religious symbols"
+    exclusion_criteria:
+      - "General movement checkpoints not specifically targeting religious access"
+      - "Raids on homes adjacent to mosques (unless the mosque itself is involved)"
+      - "Arrest of religious figures without encroachment on the religious site"
+    examples:
+      - "Settlers stormed the Al-Aqsa Mosque compound and performed religious rituals"
+      - "Israeli forces prevented worshippers from entering the mosque for Friday prayers"
+    prevalence_train: 0.011
+    is_rare: true
+    typical_co_labels:
+      - coercive_actions_y
+      - restriction_of_freedoms_y
+    constraints: []
+
+  restriction_of_freedoms_y:
+    name: "Restriction of Freedoms"
+    model_column: "restriction_of_freedoms_y"
+    definition: >
+      Systematic or targeted measures that restrict the movement, access, work,
+      or daily life of Palestinians. Includes imposed curfews, new checkpoints,
+      roadblocks, and prevention of access to medical care, agricultural land,
+      religious sites, or employment.
+    inclusion_criteria:
+      - "Curfew imposed on a village, neighborhood, or city"
+      - "New flying checkpoint or roadblock established restricting movement"
+      - "Prevention of farmers from accessing their agricultural land"
+      - "Blocking ambulances, medical teams, or humanitarian aid workers"
+      - "Closure orders preventing entry to or exit from an area"
+      - "Outpost establishment cutting off community access"
+    exclusion_criteria:
+      - "Arrest at a checkpoint (code primarily as arrest_detention_y; restriction may co-apply)"
+      - "Physical assault at a checkpoint (code as physical_assault_y; restriction may co-apply)"
+      - "Demolition as the primary act (restriction_of_freedoms_y may co-apply for area closure)"
+    examples:
+      - "Israeli forces imposed a 48-hour curfew on the village, preventing residents from leaving"
+      - "A new roadblock was established on the main road connecting Ramallah to Nablus"
+    prevalence_train: 0.144
+    is_rare: false
+    typical_co_labels:
+      - coercive_actions_y
+      - raid_y
+    constraints: []
+
+  coercive_actions_y:
+    name: "Coercive Actions"
+    model_column: "coercive_actions_y"
+    definition: >
+      Acts of intimidation, harassment, or psychological coercion directed at Palestinians
+      without direct physical assault. Includes verbal threats, search and interrogation
+      operations, visible military deployment as intimidation, and issuance of administrative
+      orders designed to pressure communities.
+    inclusion_criteria:
+      - "Verbal threats or harassment by soldiers, police, or settlers"
+      - "Search and interrogation operations (without resulting arrest)"
+      - "Deployment of troops, jeeps, or drones in a neighborhood as a show of force"
+      - "Issuance of administrative demolition or stop-work orders"
+      - "Identity checks and body searches at non-permanent checkpoints"
+    exclusion_criteria:
+      - "Actual physical violence (code as physical_assault_y; coercive may co-apply)"
+      - "Actual demolition execution (code as harm_to_property_y; coercive may co-apply for the order)"
+      - "Actual detention (code as arrest_detention_y; coercive may co-apply)"
+    examples:
+      - "Israeli soldiers set up a flying checkpoint and interrogated residents for several hours"
+      - "Settlers threatened Palestinian farmers at gunpoint and ordered them to leave"
+      - "Israeli forces distributed demolition orders to three families in the village"
+    prevalence_train: 0.455
+    is_rare: false
+    typical_co_labels:
+      - raid_y
+      - arrest_detention_y
+      - restriction_of_freedoms_y
+    constraints: []
+
+  protest_y:
+    name: "Protest"
+    model_column: "protest_y"
+    definition: >
+      Organized or spontaneous Palestinian protests, demonstrations, or acts of civil
+      resistance. Includes marches, sit-ins, and collective confrontations at checkpoints
+      or near settlements. This is a rare label — any positive prediction should be verified.
+    inclusion_criteria:
+      - "Organized march or demonstration by Palestinian community members"
+      - "Stone-throwing in the context of a protest (not an isolated individual attack)"
+      - "Sit-in or civil disobedience action at a specific location"
+      - "Weekly or recurring protests (e.g., Kafr Qaddum, Beita)"
+    exclusion_criteria:
+      - "Individual stone-throwing or attack not in the context of an organized protest"
+      - "Armed militant attacks or clashes (code under perpetrator and relevant violence labels)"
+      - "Israeli settler or military counter-actions at a protest site"
+    examples:
+      - "Hundreds of Palestinians marched to protest land confiscation in Nablus governorate"
+      - "Weekly Friday protest at Kafr Qaddum was met with tear gas and rubber bullets"
+    prevalence_train: 0.036
+    is_rare: true
+    typical_co_labels:
+      - physical_assault_y
+      - multi_community_incident_y
+    constraints: []
+
+  multi_community_incident_y:
+    name: "Multi-Community Incident"
+    model_column: "multi_community_incident_y"
+    definition: >
+      An incident or coordinated set of actions that affected multiple Palestinian
+      villages, towns, neighborhoods, or communities simultaneously or in close succession
+      as part of a unified operation or campaign. The multi-community nature must be
+      explicitly stated or clearly implied in the description.
+    inclusion_criteria:
+      - "Description explicitly names multiple localities as targets"
+      - "Coordinated military or settler action spanning several communities in one operation"
+      - "Incident described as affecting a region or multiple areas simultaneously"
+      - "Simultaneous raids or closures in more than one village or town"
+    exclusion_criteria:
+      - "Single-location incident where people from multiple communities were present"
+      - "Mention of regional context or background without multi-location operational impact"
+      - "Sequential (non-simultaneous) incidents in different locations reported together"
+    examples:
+      - "Israeli forces conducted simultaneous raids in Nablus, Jenin, and Tulkarm"
+      - "Settlers attacked communities across three villages in the Hebron governorate on the same night"
+    prevalence_train: 0.088
+    is_rare: false
+    typical_co_labels:
+      - raid_y
+      - arrest_detention_y
+    constraints: []

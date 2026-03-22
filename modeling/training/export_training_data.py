@@ -17,6 +17,10 @@ PROCESSED_FILES = [
     ("oppression_2025.csv", 2025),
 ]
 
+# Sheets export (produced by data_pipeline/export_sheets_to_csv.py).
+# Included automatically when the file exists; year is derived per-row from the date column.
+SHEETS_EXPORT_FILE = PROCESSED_DIR / "incidents_from_sheets.csv"
+
 
 # ---------- Target normalization ----------
 def norm_bool01(x) -> int:
@@ -90,6 +94,41 @@ def build() -> pd.DataFrame:
             df[col + "_y"] = df[col].apply(norm_presence)
 
         frames.append(df)
+
+    # Optionally include converted oppression CSVs
+    # (produced by data_pipeline/convert_oppression_db_to_incidents.py)
+    for converted_path in sorted(PROCESSED_DIR.glob("oppression_*_converted.csv")):
+        df_conv = pd.read_csv(converted_path, dtype=str)
+        df_conv["year"] = (
+            pd.to_datetime(df_conv.get("date", pd.Series(dtype=str)), errors="coerce").dt.year
+        )
+        n_before = len(df_conv)
+        df_conv = df_conv.dropna(subset=["year"])
+        df_conv["year"] = df_conv["year"].astype(int)
+        if n_before > len(df_conv):
+            print(f"[WARN] {converted_path.name}: dropped {n_before - len(df_conv)} rows with unparseable dates")
+        df_conv["source_file"] = converted_path.name
+        frames.append(df_conv)
+        print(f"[OK] Included {converted_path.name}: {len(df_conv)} rows")
+
+    # Optionally include rows exported from Google Sheets
+    if SHEETS_EXPORT_FILE.exists():
+        df_sheets = pd.read_csv(SHEETS_EXPORT_FILE)
+        # Derive year from the date column; drop rows where year cannot be parsed
+        df_sheets["year"] = (
+            pd.to_datetime(df_sheets["date"], errors="coerce").dt.year
+        )
+        n_before = len(df_sheets)
+        df_sheets = df_sheets.dropna(subset=["year"])
+        df_sheets["year"] = df_sheets["year"].astype(int)
+        if n_before > len(df_sheets):
+            print(f"[WARN] incidents_from_sheets.csv: dropped {n_before - len(df_sheets)} rows with unparseable dates")
+        df_sheets["source_file"] = "incidents_from_sheets.csv"
+        frames.append(df_sheets)
+        print(f"[OK] Included incidents_from_sheets.csv: {len(df_sheets)} rows")
+    else:
+        print("[INFO] incidents_from_sheets.csv not found — skipping. "
+              "Run: python data_pipeline/export_sheets_to_csv.py")
 
     full = pd.concat(frames, ignore_index=True, sort=False)
 
