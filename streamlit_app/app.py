@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import math
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -54,6 +55,8 @@ DEBERTA_META = (
     / "modeling" / "saved_models"
     / "deberta_v3_multilabel" / "deberta_v3_meta.json"
 )
+
+BACKUPS_DIR = PROJECT_ROOT / "modeling" / "backups"
 
 SPREADSHEET_ID = "1Z7zu2JLxOIU1yK3SrXIz8yN3a-2Kzd7d0g0-VNrkwaI"
 SHEETS_URL     = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}"
@@ -185,6 +188,82 @@ def _build_metrics_table(meta: dict, split: str = "test") -> Optional[pd.DataFra
 
 
 # ---------------------------------------------------------------------------
+# Checkpoint / backup helpers
+# ---------------------------------------------------------------------------
+
+def _create_backup(label: str = "") -> Path:
+    """Copy current model artifacts to a timestamped checkpoint folder."""
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    slug = f"_{label.strip().replace(' ', '_')}" if label.strip() else ""
+    dest = BACKUPS_DIR / f"checkpoint_{ts}{slug}"
+    dest.mkdir(parents=True, exist_ok=True)
+
+    # Baseline model (pkl + meta JSON — typically a few MB)
+    baseline_src = PROJECT_ROOT / "modeling" / "saved_models" / "baseline_rank_based_fixed"
+    if baseline_src.exists():
+        shutil.copytree(baseline_src, dest / "baseline_rank_based_fixed")
+
+    # DeBERTa meta JSON only (weights live on HF Hub — too large to copy locally)
+    deberta_meta_src = (
+        PROJECT_ROOT / "modeling" / "saved_models"
+        / "deberta_v3_multilabel" / "deberta_v3_meta.json"
+    )
+    if deberta_meta_src.exists():
+        deb_dir = dest / "deberta_v3_multilabel"
+        deb_dir.mkdir(exist_ok=True)
+        shutil.copy2(deberta_meta_src, deb_dir / "deberta_v3_meta.json")
+
+    # Master training dataset
+    master_src = TRAINING_DIR / "master_reviewed_dataset.csv"
+    if master_src.exists():
+        shutil.copy2(master_src, dest / "master_reviewed_dataset.csv")
+
+    # Checkpoint manifest
+    contents = [str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file()]
+    (dest / "checkpoint_info.json").write_text(
+        json.dumps({"created": ts, "label": label, "contents": contents}, indent=2)
+    )
+    return dest
+
+
+def _list_backups() -> list[Path]:
+    if not BACKUPS_DIR.exists():
+        return []
+    return sorted(
+        [d for d in BACKUPS_DIR.iterdir() if d.is_dir() and d.name.startswith("checkpoint_")],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def _dir_size_mb(path: Path) -> float:
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) / 1_048_576
+
+
+def _restore_backup(checkpoint_dir: Path):
+    """Overwrite active model artifacts with contents of a checkpoint."""
+    baseline_src  = checkpoint_dir / "baseline_rank_based_fixed"
+    baseline_dest = PROJECT_ROOT / "modeling" / "saved_models" / "baseline_rank_based_fixed"
+    if baseline_src.exists():
+        if baseline_dest.exists():
+            shutil.rmtree(baseline_dest)
+        shutil.copytree(baseline_src, baseline_dest)
+
+    deberta_meta_src  = checkpoint_dir / "deberta_v3_multilabel" / "deberta_v3_meta.json"
+    deberta_meta_dest = (
+        PROJECT_ROOT / "modeling" / "saved_models"
+        / "deberta_v3_multilabel" / "deberta_v3_meta.json"
+    )
+    if deberta_meta_src.exists():
+        shutil.copy2(deberta_meta_src, deberta_meta_dest)
+
+    master_src  = checkpoint_dir / "master_reviewed_dataset.csv"
+    master_dest = TRAINING_DIR / "master_reviewed_dataset.csv"
+    if master_src.exists():
+        shutil.copy2(master_src, master_dest)
+
+
+# ---------------------------------------------------------------------------
 # Page: Dashboard
 # ---------------------------------------------------------------------------
 
@@ -300,8 +379,34 @@ def page_run():
     st.header("Run Pipeline")
     st.caption(
         "Runs `run_pipeline.py` with the selected options. "
-        "Output streams live below. The page will refresh when done."
+        "Output streams live below."
     )
+
+    # Persist log output across reruns so it doesn't vanish on page interaction
+    for key, default in [("run_log", None), ("run_rc", None), ("run_cmd", None)]:
+        if key not in st.session_state:
+            st.session_state[key] = default
+
+    def _run_and_store(cmd: list):
+        st.session_state.run_cmd = " ".join(str(c) for c in cmd)
+        st.session_state.run_log = None
+        st.session_state.run_rc = None
+        live_box = st.empty()
+        lines: list[str] = []
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=str(PROJECT_ROOT),
+        )
+        for line in proc.stdout:
+            lines.append(line)
+            live_box.code("".join(lines[-300:]), language="")
+        proc.wait()
+        st.session_state.run_log = "".join(lines)
+        st.session_state.run_rc = proc.returncode
+        live_box.empty()  # replaced by the persistent block below
 
     with st.form("pipeline_form"):
         col1, col2 = st.columns(2)
@@ -325,15 +430,7 @@ def page_run():
             cmd.append("--push-to-sheets")
         if dry_run:
             cmd.append("--dry-run")
-
-        st.info(f"Command: `{' '.join(str(c) for c in cmd)}`")
-        log_box = st.empty()
-        rc = _run_command(cmd, log_box)
-        if rc == 0:
-            st.success("Pipeline completed.")
-        else:
-            st.error(f"Pipeline exited with code {rc}.")
-        st.rerun()
+        _run_and_store(cmd)
 
     # --- Quick shortcuts ---
     st.divider()
@@ -341,19 +438,21 @@ def page_run():
     qc1, qc2 = st.columns(2)
     with qc1:
         if st.button("⏭  Skip ingest · baseline · push to Sheets"):
-            cmd = [PYTHON, "run_pipeline.py", "--skip-ingest", "--model", "baseline", "--push-to-sheets"]
-            st.info(f"Command: `{' '.join(str(c) for c in cmd)}`")
-            log_box = st.empty()
-            rc = _run_command(cmd, log_box)
-            st.success("Done.") if rc == 0 else st.error(f"Exit code {rc}.")
-            st.rerun()
+            _run_and_store([PYTHON, "run_pipeline.py", "--skip-ingest", "--model", "baseline", "--push-to-sheets"])
     with qc2:
         if st.button("🔍  Dry run (full pipeline preview)"):
-            cmd = [PYTHON, "run_pipeline.py", "--dry-run"]
-            st.info(f"Command: `{' '.join(str(c) for c in cmd)}`")
-            log_box = st.empty()
-            rc = _run_command(cmd, log_box)
-            st.success("Done.") if rc == 0 else st.error(f"Exit code {rc}.")
+            _run_and_store([PYTHON, "run_pipeline.py", "--dry-run"])
+
+    # --- Persistent output (survives reruns) ---
+    if st.session_state.run_cmd:
+        st.divider()
+        st.caption(f"Last run: `{st.session_state.run_cmd}`")
+        if st.session_state.run_log is not None:
+            st.code(st.session_state.run_log[-8000:], language="")
+        if st.session_state.run_rc == 0:
+            st.success("Pipeline completed.")
+        elif st.session_state.run_rc is not None:
+            st.error(f"Pipeline exited with code {st.session_state.run_rc}.")
 
 
 # ---------------------------------------------------------------------------
@@ -416,11 +515,38 @@ def page_review():
                 "--from-sheets",
                 "--predictions", str(latest_preds),
             ]
-            st.info(f"Command: `{' '.join(str(c) for c in cmd)}`")
-            log_box = st.empty()
-            rc = _run_command(cmd, log_box)
-            st.success("Merge complete.") if rc == 0 else st.error(f"Exit code {rc}.")
-            st.rerun()
+            for key, default in [("merge_log", None), ("merge_rc", None), ("merge_cmd", None)]:
+                if key not in st.session_state:
+                    st.session_state[key] = default
+            st.session_state.merge_cmd = " ".join(str(c) for c in cmd)
+            live_box = st.empty()
+            lines: list[str] = []
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                cwd=str(PROJECT_ROOT),
+            )
+            for line in proc.stdout:
+                lines.append(line)
+                live_box.code("".join(lines[-300:]), language="")
+            proc.wait()
+            st.session_state.merge_log = "".join(lines)
+            st.session_state.merge_rc = proc.returncode
+            live_box.empty()
+
+    for key, default in [("merge_log", None), ("merge_rc", None), ("merge_cmd", None)]:
+        if key not in st.session_state:
+            st.session_state[key] = default
+    if st.session_state.merge_cmd:
+        st.caption(f"Last merge: `{st.session_state.merge_cmd}`")
+        if st.session_state.merge_log is not None:
+            st.code(st.session_state.merge_log[-8000:], language="")
+        if st.session_state.merge_rc == 0:
+            st.success("Merge complete.")
+        elif st.session_state.merge_rc is not None:
+            st.error(f"Exit code {st.session_state.merge_rc}.")
     else:
         st.info("No predictions audit file found. Run the pipeline first.")
 
@@ -513,24 +639,86 @@ def page_retrain():
 
     st.divider()
 
+    # --- Checkpoint management ---
+    st.subheader("Version Checkpoints")
+    st.caption(
+        "A checkpoint saves the current baseline model, DeBERTa meta JSON, and master "
+        "training dataset. Restore any checkpoint to undo an accidental retrain."
+    )
+
+    chk_col1, chk_col2 = st.columns([2, 1])
+    with chk_col1:
+        chk_label = st.text_input("Checkpoint label (optional)", placeholder="e.g. before-march-retrain")
+    with chk_col2:
+        st.write("")
+        st.write("")
+        if st.button("💾  Create Checkpoint Now"):
+            with st.spinner("Saving checkpoint…"):
+                saved = _create_backup(label=chk_label)
+            st.success(f"Checkpoint saved: `{saved.name}`")
+
+    backups = _list_backups()
+    if backups:
+        st.markdown("**Existing checkpoints** (newest first):")
+        for cp in backups:
+            info_file = cp / "checkpoint_info.json"
+            info      = json.loads(info_file.read_text()) if info_file.exists() else {}
+            size_mb   = _dir_size_mb(cp)
+            lbl       = f"  — *{info.get('label')}*" if info.get("label") else ""
+            col_a, col_b = st.columns([5, 1])
+            with col_a:
+                st.markdown(f"**{cp.name}**{lbl}  `{size_mb:.1f} MB`  ·  {len(info.get('contents', []))} files")
+            with col_b:
+                if st.button("↩ Restore", key=f"restore_{cp.name}"):
+                    with st.spinner(f"Restoring {cp.name}…"):
+                        _restore_backup(cp)
+                    st.success(f"Restored from `{cp.name}`. Reload the page to see updated metrics.")
+    else:
+        st.info("No checkpoints yet. Create one before retraining.")
+
+    st.divider()
+
     # --- Retrain button ---
     st.subheader("Run Retraining")
     dry_run = st.checkbox("Dry run (preview steps without writing)")
+    for key, default in [("retrain_log", None), ("retrain_rc", None), ("retrain_cmd", None)]:
+        if key not in st.session_state:
+            st.session_state[key] = default
+
     if st.button("🔁  Retrain Baseline", type="primary"):
+        if not dry_run:
+            with st.spinner("Auto-saving checkpoint before retraining…"):
+                auto_cp = _create_backup(label="auto-before-retrain")
+            st.info(f"Auto-checkpoint saved: `{auto_cp.name}`")
         cmd = [PYTHON, "run_pipeline.py", "--retrain-only"]
         if dry_run:
             cmd.append("--dry-run")
-        st.info(f"Command: `{' '.join(str(c) for c in cmd)}`")
-        log_box = st.empty()
-        rc = _run_command(cmd, log_box)
-        if rc == 0:
-            st.success(
-                "Retraining complete. "
-                "Reload the page to see updated metrics from the new baseline_meta.json."
-            )
-        else:
-            st.error(f"Retraining failed (exit code {rc}).")
-        st.rerun()
+        st.session_state.retrain_cmd = " ".join(str(c) for c in cmd)
+        live_box = st.empty()
+        lines: list[str] = []
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=str(PROJECT_ROOT),
+        )
+        for line in proc.stdout:
+            lines.append(line)
+            live_box.code("".join(lines[-300:]), language="")
+        proc.wait()
+        st.session_state.retrain_log = "".join(lines)
+        st.session_state.retrain_rc = proc.returncode
+        live_box.empty()
+
+    if st.session_state.retrain_cmd:
+        st.caption(f"Last retrain: `{st.session_state.retrain_cmd}`")
+        if st.session_state.retrain_log is not None:
+            st.code(st.session_state.retrain_log[-8000:], language="")
+        if st.session_state.retrain_rc == 0:
+            st.success("Retraining complete. Reload the page to see updated metrics.")
+        elif st.session_state.retrain_rc is not None:
+            st.error(f"Retraining failed (exit code {st.session_state.retrain_rc}).")
 
     st.caption(
         "After retraining the baseline, run DeBERTa fine-tuning manually:  \n"
