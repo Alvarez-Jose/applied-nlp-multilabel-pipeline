@@ -44,3 +44,6 @@ streamlit>=1.35
 # ── Visualization (analysis / eval notebooks) ─────────────────────────────────
 matplotlib>=3.8
 seaborn>=0.13
+
+# ── Statistical export (SPSS / R) ─────────────────────────────────────────────
+pyreadstat>=1.2          # write .sav (SPSS) files with variable and value labels
