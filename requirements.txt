@@ -21,7 +21,10 @@ openpyxl>=3.1           # Excel read/write for reviewed sheets
 # ── ML — inference ────────────────────────────────────────────────────────────
 scikit-learn>=1.5
 joblib>=1.4
-torch>=2.5
+# CPU-only torch — keeps the install under Streamlit Cloud's size limit.
+# For GPU fine-tuning, install the CUDA build locally; the dashboard only
+# needs CPU inference for the baseline model.
+torch>=2.1,<2.6 --index-url https://download.pytorch.org/whl/cpu
 transformers>=4.41
 safetensors>=0.4
 sentencepiece>=0.2      # DeBERTa tokenizer
