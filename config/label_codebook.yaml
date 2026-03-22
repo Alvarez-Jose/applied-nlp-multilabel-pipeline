@@ -9,9 +9,17 @@
 # For controlled vocabularies (governorates, perpetrators, etc.) see data_pipeline/codebook.py
 
 metadata:
-  version: "1.0"
+  version: "1.1"
   project: "Oppression Database"
   created: "2026-03-21"
+  updated: "2026-03-22"
+  changelog: >
+    v1.1: Renamed protest_y to "Resistance and Collective Action"; added
+    restriction_of_freedoms_y installation-only rule; clarified religious_encroachment_y
+    vs harm_to_property_y boundary for physical damage to religious sites; added
+    Masafer Yatta exception to multi_community_incident_y; added property-search-only
+    = coercive exclusion to harm_to_property_y; added killing animals clarification
+    to dispossession_y; added stabbing/attempted seizure notes.
   description: >
     Coding manual definitions for the 10 binary event labels used in the
     Palestine Violence Archive multilabel classification system.
@@ -142,6 +150,8 @@ labels:
       - "Confiscation or appropriation of property without physical damage (code as dispossession_y)"
       - "Blocking access to property without physical damage (code as restriction_of_freedoms_y)"
       - "Threatened demolition not yet executed (code as coercive_actions_y)"
+      - "Property search or house search without any resulting damage or vandalism — code as coercive_actions_y (Intimidation) only, NOT as harm_to_property_y"
+      - "Physical damage to a religious site or mosque — code as harm_to_property_y (not religious_encroachment_y, which covers intrusion/interference, not structural damage)"
     examples:
       - "Settlers vandalized parked vehicles and wrote graffiti on walls of a Palestinian home"
       - "Israeli forces demolished a Palestinian family's home in Hebron"
@@ -168,17 +178,19 @@ labels:
       Taking, seizing, requisitioning, or permanently or temporarily appropriating
       Palestinian land, livestock, produce, or personal property. Includes actions
       that deprive Palestinians of use or ownership of assets, even without physical
-      damage to those assets.
+      damage to those assets. Intentional killing of livestock counts as dispossession.
     inclusion_criteria:
       - "Land confiscation or formal requisition orders for military or settlement use"
       - "Theft of agricultural produce (olives, crops, harvests)"
       - "Theft or seizure of vehicles, personal belongings, or equipment"
-      - "Killing or confiscating livestock"
+      - "Killing or confiscating livestock (intentional killing of farm animals = dispossession)"
       - "Temporary requisition of buildings for military use"
+      - "Attempted theft or seizure of property, even if unsuccessful (code as dispossession_y; also consider coercive_actions_y for the intimidation component)"
     exclusion_criteria:
       - "Physical damage to property not resulting in permanent loss (code as harm_to_property_y)"
       - "Blocking access to land without seizure (code as restriction_of_freedoms_y)"
       - "Demolition orders not yet resulting in land seizure"
+      - "Vandalism or destruction of property — even if total loss — is harm_to_property_y not dispossession_y unless ownership transfers"
     examples:
       - "Israeli settlers stole sheep from Palestinian herders in the Jordan Valley"
       - "Israeli authorities issued a confiscation order for 50 dunams of agricultural land"
@@ -193,20 +205,24 @@ labels:
     name: "Religious Encroachment"
     model_column: "religious_encroachment_y"
     definition: >
-      Incursions into, desecration of, or interference with Palestinian religious sites,
-      practices, or observances. Includes mosques, churches, cemeteries, and religious
-      gatherings. This is a rare label — any positive prediction should be carefully verified.
+      Incursions into, interference with, or assertion of dominance over Palestinian
+      religious sites, practices, or observances. Covers the act of entering, using,
+      or performing rituals in a sacred space to assert presence or control. This is
+      a rare label — any positive prediction should be carefully verified.
+      NOTE (11/5/2025): Physical damage or destruction of a religious site is coded as
+      harm_to_property_y, not religious_encroachment_y. Religious encroachment is about
+      intrusion/interference, not structural damage.
     inclusion_criteria:
       - "Israeli forces or settlers entering or storming mosques, churches, or shrines"
-      - "Desecration of religious artifacts, prayer spaces, or cemeteries"
+      - "Settlers performing religious rituals inside Palestinian religious spaces to assert dominance"
       - "Blocking Palestinians from reaching religious sites (Al-Aqsa, churches)"
       - "Interference with Friday prayers, Eid gatherings, or Christian holy day observances"
-      - "Settlers conducting religious rituals in Palestinian religious spaces"
-      - "Damage to mosques, minarets, or religious symbols"
+      - "Preventing worshippers from entering or remaining at a mosque or church"
     exclusion_criteria:
+      - "Physical damage, vandalism, or destruction of a mosque or church (code as harm_to_property_y)"
       - "General movement checkpoints not specifically targeting religious access"
-      - "Raids on homes adjacent to mosques (unless the mosque itself is involved)"
-      - "Arrest of religious figures without encroachment on the religious site"
+      - "Raids on homes adjacent to mosques unless the mosque itself is the entry point"
+      - "Arrest of religious figures without encroachment on the religious site itself"
     examples:
       - "Settlers stormed the Al-Aqsa Mosque compound and performed religious rituals"
       - "Israeli forces prevented worshippers from entering the mosque for Friday prayers"
@@ -225,17 +241,23 @@ labels:
       or daily life of Palestinians. Includes imposed curfews, new checkpoints,
       roadblocks, and prevention of access to medical care, agricultural land,
       religious sites, or employment.
+      IMPORTANT (5/16/2025): Only code checkpoints or barriers when they are
+      newly installed or closed during the incident. Do NOT code this label when
+      a description merely mentions a pre-existing checkpoint in passing.
     inclusion_criteria:
       - "Curfew imposed on a village, neighborhood, or city"
       - "New flying checkpoint or roadblock established restricting movement"
+      - "Closure of an existing checkpoint restricting traffic"
       - "Prevention of farmers from accessing their agricultural land"
       - "Blocking ambulances, medical teams, or humanitarian aid workers"
       - "Closure orders preventing entry to or exit from an area"
       - "Outpost establishment cutting off community access"
+      - "Prevention of movement to work, religious practice, or medical care"
     exclusion_criteria:
       - "Arrest at a checkpoint (code primarily as arrest_detention_y; restriction may co-apply)"
       - "Physical assault at a checkpoint (code as physical_assault_y; restriction may co-apply)"
       - "Demolition as the primary act (restriction_of_freedoms_y may co-apply for area closure)"
+      - "Pre-existing checkpoint merely mentioned as background context — only code when installed or closed"
     examples:
       - "Israeli forces imposed a 48-hour curfew on the village, preventing residents from leaving"
       - "A new roadblock was established on the main road connecting Ramallah to Nablus"
@@ -277,21 +299,23 @@ labels:
     constraints: []
 
   protest_y:
-    name: "Protest"
+    name: "Resistance and Collective Action"
     model_column: "protest_y"
     definition: >
-      Organized or spontaneous Palestinian protests, demonstrations, or acts of civil
-      resistance. Includes marches, sit-ins, and collective confrontations at checkpoints
-      or near settlements. This is a rare label — any positive prediction should be verified.
+      An action taken by Palestinians to resist or protest Israeli policies and actions
+      in the West Bank. Includes protests, demonstrations, sit-ins, and confrontations
+      with the Israeli army. This is a rare label — any positive prediction should be
+      carefully verified.
     inclusion_criteria:
       - "Organized march or demonstration by Palestinian community members"
-      - "Stone-throwing in the context of a protest (not an isolated individual attack)"
       - "Sit-in or civil disobedience action at a specific location"
+      - "Stone-throwing by Palestinians in the context of an organized protest or confrontation"
       - "Weekly or recurring protests (e.g., Kafr Qaddum, Beita)"
+      - "Confrontations with Israeli army that are resistance-motivated (not individual isolated attacks)"
     exclusion_criteria:
       - "Individual stone-throwing or attack not in the context of an organized protest"
       - "Armed militant attacks or clashes (code under perpetrator and relevant violence labels)"
-      - "Israeli settler or military counter-actions at a protest site"
+      - "Israeli settler or military counter-actions at a protest site (those are coded on the oppressor side)"
     examples:
       - "Hundreds of Palestinians marched to protest land confiscation in Nablus governorate"
       - "Weekly Friday protest at Kafr Qaddum was met with tear gas and rubber bullets"
@@ -319,6 +343,8 @@ labels:
       - "Single-location incident where people from multiple communities were present"
       - "Mention of regional context or background without multi-location operational impact"
       - "Sequential (non-simultaneous) incidents in different locations reported together"
+      - "Arrest campaigns across multiple locations — these are coded as separate entries, each with the same ID, not as a single multi-community incident"
+      - "Multiple sub-communities within Masafer Yatta — always code location as 'Masafer Yatta' (Community), do NOT mark as multi-community incident"
     examples:
       - "Israeli forces conducted simultaneous raids in Nablus, Jenin, and Tulkarm"
       - "Settlers attacked communities across three villages in the Hebron governorate on the same night"
