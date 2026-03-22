@@ -149,6 +149,21 @@ def main() -> None:
         help="Cap the export batch at N rows. Recommended: 100-200 to keep review manageable.",
     )
     parser.add_argument(
+        "--dedup",
+        action="store_true",
+        help=(
+            "Run deduplication on the batch CSV before prediction. "
+            "Removes near-duplicate articles (same date + governorate + high text similarity). "
+            "Uses default threshold of 0.85."
+        ),
+    )
+    parser.add_argument(
+        "--dedup-threshold",
+        type=float,
+        default=0.85,
+        help="Cosine similarity threshold for --dedup. Default: 0.85.",
+    )
+    parser.add_argument(
         "--retrain-only",
         action="store_true",
         help="Only run the retraining steps (export_training_data + train_baseline). "
@@ -257,6 +272,24 @@ def main() -> None:
         else:
             log.warning("No batch files found in data/incoming/. Skipping prediction.")
             args.skip_predict = True
+
+    # -----------------------------------------------------------------------
+    # STEP 2b — DEDUP (optional)
+    # -----------------------------------------------------------------------
+    if args.dedup and incoming_csv and not args.dry_run and incoming_csv.exists():
+        log.info("=== STEP 2b: Deduplication (threshold=%.2f) ===", args.dedup_threshold)
+        ok = run(
+            [
+                PYTHON, "data_pipeline/cleaning/deduplicate_events.py",
+                "--input", str(incoming_csv),
+                "--threshold", str(args.dedup_threshold),
+            ],
+            "deduplicate_events", args.dry_run,
+        )
+        if not ok:
+            log.warning("Deduplication step failed — continuing with original batch.")
+    elif args.dedup:
+        log.info("=== STEP 2b: Dedup skipped (dry-run or no batch file) ===")
 
     # -----------------------------------------------------------------------
     # STEP 3 — PREDICT
