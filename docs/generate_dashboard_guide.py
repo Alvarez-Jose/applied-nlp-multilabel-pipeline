@@ -30,9 +30,9 @@ OUTPUT_PATH = PROJECT_ROOT / "docs" / "Dashboard_User_Guide.pdf"
 # Content definition
 # ---------------------------------------------------------------------------
 
-TITLE   = "Palestine Violence Archive"
+TITLE    = "Palestine Violence Archive"
 SUBTITLE = "Dashboard & Pipeline User Guide"
-VERSION = f"Version 1.0  |  {date.today().strftime('%B %Y')}"
+VERSION  = f"Version 2.0  |  {date.today().strftime('%B %Y')}"
 
 SECTIONS = [
     {
@@ -44,229 +44,232 @@ SECTIONS = [
             "news agency, classifies each incident across 10 violence labels using machine "
             "learning, routes uncertain cases to human reviewers, and continuously retrains "
             "the model as reviewed labels accumulate.\n\n"
-            "The goal is to build a clean, labeled dataset of incidents (raids, arrests, "
-            "property destruction, etc.) that the professor and research assistants (RAs) "
-            "can export to SPSS or R for statistical analysis and eventual publication."
+            "The goal is to produce a clean, labeled dataset of incidents suitable for "
+            "statistical analysis in SPSS or R and for export to a permanent research database "
+            "in support of peer-reviewed publication."
         ),
     },
     {
-        "heading": "2. Pipeline Flow",
+        "heading": "2. Google Sheets Structure",
         "body": (
-            "The pipeline runs in four stages:\n\n"
-            "  1. Ingest  —  Scrapes new WAFA articles and writes them to the Google "
-            "Sheets 'Reports' tab. Duplicate URLs are skipped automatically.\n\n"
-            "  2. Export  —  Reads unprocessed rows from the 'Reports' tab and saves "
-            "them as a timestamped CSV in data/incoming/.\n\n"
-            "  3. Predict  —  Runs the baseline (TF-IDF + logistic regression) or "
-            "DeBERTa v3 model on the batch CSV. Produces a compact review sheet "
-            "(XLSX/CSV) in data/review_exports/ with model predictions, confidence "
-            "scores, uncertainty flags, and empty human_* columns for RAs to fill.\n\n"
-            "  4. Retrain  —  After RAs review enough batches and labels are merged "
-            "back into the training dataset, the baseline model is rebuilt and evaluated. "
-            "DeBERTa can then be fine-tuned separately."
+            "The pipeline uses three tabs in one shared Google Spreadsheet:\n\n"
+            "  Reports  —  Raw scraped articles (input layer). Written by the scraper. "
+            "Contains: report_id, url, title, body_text, published_date, language, "
+            "location_raw, actors_raw.\n\n"
+            "  Review  —  Model predictions awaiting human verification (working layer). "
+            "Written by the pipeline after each prediction run. RAs fill in the human_* "
+            "columns here and set review_status = reviewed.\n\n"
+            "  Incidents  —  Finalized, clean incident records (publication layer). "
+            "Written by the Transfer to Incidents step after human review is complete. "
+            "Contains only facts and labels — no model scores or pipeline metadata. "
+            "This tab mirrors what a proper database table will look like, making future "
+            "migration straightforward."
         ),
     },
     {
-        "heading": "3. Dashboard Pages",
+        "heading": "3. Pipeline Flow",
         "body": (
-            "The left sidebar lists five pages. Each is described below."
+            "The pipeline runs in seven steps:\n\n"
+            "  Step 1 — Ingest  —  Scrapes new WAFA articles into the Reports tab. "
+            "Duplicate URLs are skipped automatically.\n\n"
+            "  Step 2 — Export  —  Reads unprocessed rows from Reports and saves them "
+            "as a timestamped CSV in data/incoming/.\n\n"
+            "  Step 3 — Predict  —  Runs the baseline or DeBERTa model. Produces a "
+            "compact review sheet in data/review_exports/ and pushes it to the Review tab.\n\n"
+            "  Step 4 — Human Review  —  RAs open the Review tab, fill in human_* columns "
+            "(1/0), and set review_status = reviewed. Double-review rows (5% random sample) "
+            "are filled by a second RA for inter-rater reliability tracking.\n\n"
+            "  Step 5 — Merge  —  Reviewed labels are merged into master_reviewed_dataset.csv "
+            "for model retraining.\n\n"
+            "  Step 6 — Transfer to Incidents  —  Clean confirmed records are written to "
+            "the Incidents tab, stripping all pipeline columns. Run after each merge.\n\n"
+            "  Step 7 — Retrain  —  Once enough labeled data accumulates, the baseline "
+            "model is rebuilt. DeBERTa can be fine-tuned locally with a GPU."
         ),
     },
     {
-        "heading": "3a. Dashboard",
+        "heading": "4. Dashboard Pages",
+        "body": "The left sidebar lists six pages. Each is described below.",
+    },
+    {
+        "heading": "4a. Dashboard",
         "body": (
             "The landing page gives a live snapshot of the pipeline state.\n\n"
-            "  Incoming batch size  —  Number of articles waiting in data/incoming/ "
-            "that have not yet been reviewed.\n\n"
-            "  Review queue  —  How many rows in the latest review sheet still have "
-            "review_status != 'reviewed'.\n\n"
-            "  Model metrics  —  Per-label F1, precision, and recall from the last "
-            "baseline training run (read from baseline_meta.json).\n\n"
-            "  IRR panel  —  Computes inter-rater reliability (Cohen's Kappa) for "
-            "double-reviewed rows. A macro Kappa above 0.80 indicates strong agreement "
-            "between RAs. Click 'Compute IRR' to refresh after RAs finish a batch.\n\n"
-            "  Refresh  —  Clicking 'Refresh' reloads all metrics without re-running "
-            "the pipeline."
+            "  Incoming batch size  —  Articles in data/incoming/ not yet reviewed.\n\n"
+            "  Review queue  —  Rows in the latest review sheet with review_status not reviewed.\n\n"
+            "  Model metrics  —  Per-label F1, precision, and recall from the last baseline "
+            "training run (read from baseline_meta.json).\n\n"
+            "  IRR panel  —  Cohen's Kappa inter-rater reliability for double-reviewed rows. "
+            "A macro Kappa above 0.80 indicates strong RA agreement. "
+            "Click 'Compute IRR' to refresh after RAs finish a batch."
         ),
     },
     {
-        "heading": "3b. Run Pipeline",
+        "heading": "4b. Run Pipeline",
         "body": (
-            "The main control panel for running the full ingest → export → predict "
-            "workflow.\n\n"
-            "  Model  —  Choose 'baseline' (fast, CPU-only, good for daily runs) or "
-            "'deberta' (slower, GPU-recommended, higher accuracy).\n\n"
-            "  Skip ingest  —  Check this if you do not want to scrape new articles. "
-            "The pipeline will use whatever is already in Google Sheets.\n\n"
-            "  Re-export all reports  —  Forces re-export of all reports, ignoring "
-            "the already-exported tracking file. Use if you need to reprocess old data.\n\n"
-            "  Push compact review sheet to Sheets  —  After predicting, automatically "
-            "uploads the review sheet to the Google Sheets 'Review' tab so RAs can "
-            "work collaboratively online.\n\n"
-            "  Dry run  —  Prints exactly what each step would do without writing any "
-            "files. Always a safe first step on a new machine.\n\n"
-            "  Deduplicate batch  —  Removes near-duplicate articles (same date and "
-            "governorate, very similar text) before prediction, preventing double-counting.\n\n"
-            "  Max rows per batch  —  Caps the batch at N rows. Recommended: 100-150 "
-            "to keep review sessions manageable for RAs.\n\n"
-            "  Quick Actions  —  Pre-configured shortcuts for the most common runs "
-            "(skip ingest + baseline + push to Sheets; dry run preview).\n\n"
-            "  Log output  —  Streams live as the pipeline runs. The log persists on "
-            "screen after the run completes so you can scroll through it."
+            "The main control panel for Steps 1-3 (ingest, export, predict).\n\n"
+            "  Model  —  'baseline' runs on CPU and works on Streamlit Cloud. "
+            "'deberta' is more accurate but requires a GPU locally.\n\n"
+            "  Skip ingest  —  Use existing Sheets data without scraping new articles.\n\n"
+            "  Re-export all  —  Forces re-export ignoring the already-exported tracker.\n\n"
+            "  Push to Sheets  —  After predicting, uploads the review sheet to the "
+            "Review tab so RAs can work collaboratively online.\n\n"
+            "  Dry run  —  Prints what each step would do without writing any files.\n\n"
+            "  Deduplicate  —  Removes near-duplicate articles before prediction.\n\n"
+            "  Max rows  —  Caps the batch. Recommended: 100-150 for manageable reviews.\n\n"
+            "  Log output  —  Streams live and persists after the run so you can scroll it."
         ),
     },
     {
-        "heading": "3c. Review Access",
+        "heading": "4c. Review Access",
         "body": (
-            "Provides access to the latest batch files and links to Google Sheets.\n\n"
-            "  Google Sheets link  —  Opens the shared spreadsheet where RAs review "
-            "predictions. The 'Reports' tab contains raw scraped articles; the 'Review' "
-            "tab contains model predictions with empty human_* columns.\n\n"
-            "  Latest review file  —  Shows the most recent review_compact_*.xlsx or "
-            ".csv from data/review_exports/. Click to preview the first 20 rows.\n\n"
-            "  Latest predictions file  —  Shows the raw inference audit trail "
-            "(all confidence scores and flags) from the most recent predict run.\n\n"
-            "  RA workflow reminder  —  Step-by-step instructions reminding RAs "
-            "what to fill in (human_* columns, review_status = 'reviewed', "
-            "reviewer_notes) and where to save the completed file."
+            "Access to review files and the Google Sheets Review tab.\n\n"
+            "  Google Sheets link  —  Opens the spreadsheet. Direct RAs to the 'Review' tab.\n\n"
+            "  Latest review file  —  Preview of the most recent review_compact_*.csv.\n\n"
+            "  Latest predictions  —  Raw inference audit trail with all confidence scores.\n\n"
+            "  RA workflow reminder  —  Step-by-step instructions shown on-screen."
         ),
     },
     {
-        "heading": "3d. Export Analysis",
+        "heading": "4d. Export Analysis",
         "body": (
-            "Exports the cleaned, labeled incident database to formats the professor "
-            "can open directly in SPSS, JASP, or R.\n\n"
-            "  Years  —  Which years of processed data to include (default: 2023 2024 2025). "
-            "Requires data/processed/oppression_{year}.csv to exist; run "
-            "normalize_raw.py first if those files are missing.\n\n"
-            "  Output directory  —  Where to write the exported files (default: analysis/).\n\n"
-            "  Skip SPSS export  —  Skips writing the .sav file. Use this if pyreadstat "
-            "is not installed.\n\n"
-            "  Exported files  —  After running, the page lists all exported files with "
-            "sizes. The .sav file includes full variable labels and value labels "
-            "(e.g. 0 = No, 1 = Yes for all binary columns). The codebook_variables.csv "
-            "is a variable dictionary showing type, valid N, missing %, and value ranges.\n\n"
-            "  R usage  —  An R code snippet at the bottom shows how to load the .sav "
-            "with value labels (haven::read_sav) or the plain CSV, and how to run the "
-            "bundled descriptive_analysis.R script that produces 11 summary tables and "
-            "7 publication-ready figures."
+            "Exports the cleaned incident database for the professor (SPSS/R).\n\n"
+            "  Years  —  Which years to include (default: 2023 2024 2025). "
+            "Requires data/processed/oppression_{year}.csv.\n\n"
+            "  Output directory  —  Where to write files (default: analysis/).\n\n"
+            "  Skip SPSS export  —  Check this if pyreadstat is not installed.\n\n"
+            "  Exported files  —  .sav (SPSS/JASP), .csv (R/Excel), and "
+            "codebook_variables.csv. The .sav has full variable labels and "
+            "0=No / 1=Yes value labels for all binary columns.\n\n"
+            "  R analysis script  —  analysis/descriptive_analysis.R produces "
+            "11 summary tables and 7 figures. Run with: Rscript analysis/descriptive_analysis.R"
         ),
     },
     {
-        "heading": "3e. Retrain  (Admin only)",
+        "heading": "4e. Retrain  (Admin only)",
         "body": (
-            "This page rebuilds the active model. Only run it after enough reviewed "
-            "batches have been merged into the training dataset.\n\n"
-            "  Training data stats  —  Shows the current row count of "
-            "master_reviewed_dataset.csv so you know how much labeled data exists.\n\n"
-            "  Checkpoint system  —  Before retraining, the dashboard automatically "
-            "creates a timestamped backup of all model artifacts (baseline .pkl files, "
-            "DeBERTa meta JSON, master CSV). You can also create a manual checkpoint "
-            "at any time and restore any previous checkpoint if something goes wrong.\n\n"
-            "  Retrain baseline  —  Runs export_training_data.py followed by "
-            "train_baseline_multilabel.py. Takes 1-5 minutes on CPU.\n\n"
-            "  Retrain DeBERTa  —  Fine-tunes the DeBERTa v3 transformer. "
-            "Requires a GPU; plan for 1-3 hours on a single card.\n\n"
-            "  Merge reviewed labels  —  Merges a completed review XLSX back into "
-            "the master training CSV. Run this after RAs finish each batch before "
-            "retraining. Automatically checkpoints before merging."
+            "Rebuilds the model and manages the Incidents tab.\n\n"
+            "  Training data stats  —  Current row count of master_reviewed_dataset.csv.\n\n"
+            "  Checkpoint system  —  Auto-creates a timestamped backup before any destructive "
+            "action. Manually create or restore checkpoints at any time.\n\n"
+            "  Merge reviewed labels  —  Pulls reviewed rows from the Sheets Review tab and "
+            "merges human labels into the master training CSV. Auto-checkpoints before merging.\n\n"
+            "  Transfer to Incidents  —  Copies confirmed records (review_status = reviewed) "
+            "from the Review tab into the clean Incidents tab, stripping all pipeline columns. "
+            "Run after every merge to keep the Incidents tab current for the database.\n\n"
+            "  Retrain baseline  —  Rebuilds the TF-IDF + logistic regression model. "
+            "1-5 minutes on CPU.\n\n"
+            "  Retrain DeBERTa  —  Fine-tunes the transformer. Requires GPU; plan 1-3 hours."
         ),
     },
     {
-        "heading": "4. RA Review Workflow",
+        "heading": "4f. Documentation",
+        "body": (
+            "This page. Contains the full inline user guide and a Download PDF Guide button "
+            "that generates and downloads this document."
+        ),
+    },
+    {
+        "heading": "5. RA Review Workflow",
         "body": (
             "Research assistants follow this process for each batch:\n\n"
-            "  Step 1  —  Open the review sheet. Either use the Google Sheets link "
-            "(Review tab) or download the .xlsx from data/review_exports/.\n\n"
-            "  Step 2  —  For each row, read the description column and check or "
-            "correct the 10 pred_* columns. Fill in the corresponding human_* column "
-            "with 1 (yes) or 0 (no). Leave blank if uncertain and add a note.\n\n"
-            "  Step 3  —  For rows marked double_review = TRUE, a second RA should "
-            "independently fill the human2_* columns without looking at the first "
-            "RA's answers. This enables inter-rater reliability measurement.\n\n"
-            "  Step 4  —  Set review_status = 'reviewed' for each completed row. "
-            "Optionally fill reviewer_notes with observations.\n\n"
-            "  Step 5  —  Save the completed file to data/reviewed/ and notify the "
-            "pipeline operator to run the merge step in the Retrain page."
+            "  Step 1  —  Open Google Sheets and go to the Review tab (or download the "
+            "CSV from data/review_exports/).\n\n"
+            "  Step 2  —  For each row, read the description and fill the 10 human_* "
+            "columns with 1 (yes) or 0 (no). Leave blank if uncertain; add reviewer_notes.\n\n"
+            "  Step 3  —  For rows marked double_review = TRUE, a second RA independently "
+            "fills the human2_* columns without seeing the first RA's answers. "
+            "This measures inter-rater reliability.\n\n"
+            "  Step 4  —  Set review_status = reviewed for each completed row.\n\n"
+            "  Step 5  —  Notify the pipeline operator who will run Merge then "
+            "Transfer to Incidents."
         ),
     },
     {
-        "heading": "5. Incident Labels",
+        "heading": "6. Incident Labels",
         "body": (
             "The model classifies each incident into 10 binary labels (1 = present):\n\n"
-            "  Raid  —  Organized entry by Israeli forces into a Palestinian area to "
-            "arrest, search, or impose presence.\n\n"
-            "  Arrest/Detention  —  Apprehension or detention of Palestinians by "
-            "Israeli forces or the Palestinian Authority.\n\n"
-            "  Physical Assault  —  Direct violence: shooting, beating, tear gas, "
-            "stun grenades, dogs.\n\n"
-            "  Coercive Actions  —  Intimidation or harassment without direct assault: "
-            "verbal threats, searches, show-of-force deployments.\n\n"
-            "  Restriction of Freedoms  —  Curfews, checkpoints, roadblocks, "
-            "prevention of agricultural or medical access.\n\n"
-            "  Religious Encroachment  —  Incursion into or desecration of mosques, "
-            "churches, or holy sites; interference with prayers or observances.\n\n"
-            "  Harm to Property  —  Vandalism (graffiti, slashed tires) or destruction "
-            "(demolition, arson) of Palestinian property.\n\n"
+            "  Raid  —  Organized entry by Israeli forces into a Palestinian area.\n\n"
+            "  Arrest/Detention  —  Apprehension or detention by Israeli forces or the PA.\n\n"
+            "  Physical Assault  —  Shooting, beating, tear gas, stun grenades, dogs.\n\n"
+            "  Coercive Actions  —  Intimidation or harassment without direct assault.\n\n"
+            "  Restriction of Freedoms  —  Curfews, checkpoints, roadblocks.\n\n"
+            "  Religious Encroachment  —  Incursion into or desecration of religious sites.\n\n"
+            "  Harm to Property  —  Vandalism or destruction of Palestinian property.\n\n"
             "  Dispossession  —  Seizure or theft of land, livestock, crops, or assets.\n\n"
-            "  Protest  —  Palestinian organized demonstration, march, or civil "
-            "resistance action.\n\n"
-            "  Multi-Community Incident  —  Simultaneous or coordinated action "
-            "targeting multiple Palestinian villages or towns."
+            "  Protest  —  Palestinian organized demonstration or civil resistance.\n\n"
+            "  Multi-Community Incident  —  Coordinated action across multiple communities."
         ),
     },
     {
-        "heading": "6. Models",
+        "heading": "7. Models",
         "body": (
             "Baseline (TF-IDF + Logistic Regression)\n"
             "  Location: modeling/saved_models/baseline_rank_based_fixed/\n"
-            "  Speed: seconds on CPU. Best for daily runs and quick iteration.\n"
-            "  Thresholding: rank-based — the model predicts the top-k articles per "
-            "label, where k matches the observed training prevalence rate.\n\n"
+            "  Runs on CPU. Used by the Streamlit Cloud dashboard.\n"
+            "  Rank-based thresholding: predicts top-k articles per label where k "
+            "matches the training prevalence rate.\n\n"
             "DeBERTa v3 (Transformer)\n"
             "  Location: modeling/saved_models/deberta_v3_multilabel/\n"
-            "  Weights: stored on HuggingFace Hub (jalva182/palestine-violence-deberta)\n"
-            "  Speed: ~1 min per 100 rows on GPU; much slower on CPU.\n"
-            "  Use for final-pass labeling when accuracy matters most.\n\n"
-            "Both models output a confidence score (0-1) per label. Rows where "
-            "confidence is within 0.10 of the decision threshold are flagged as "
-            "needs_review = TRUE and routed to human reviewers."
+            "  Weights: HuggingFace Hub (jalva182/palestine-violence-deberta)\n"
+            "  Requires GPU. Install with: pip install -r requirements-gpu.txt\n\n"
+            "Both models output a confidence score (0-1) per label. Rows within 0.10 "
+            "of the threshold are flagged needs_review = TRUE."
         ),
     },
     {
-        "heading": "7. File Locations",
+        "heading": "8. Streamlit Cloud Setup",
+        "body": (
+            "1. Connect the repo at share.streamlit.io. Set main file: streamlit_app/app.py\n\n"
+            "2. Add Google credentials in app Settings -> Secrets:\n"
+            "   [gcp_service_account]\n"
+            "   type = \"service_account\"\n"
+            "   project_id = \"your-project-id\"\n"
+            "   private_key = \"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n\"\n"
+            "   client_email = \"...@....iam.gserviceaccount.com\"\n"
+            "   ... (all other fields from service_account.json)\n\n"
+            "3. DeBERTa is not available on Streamlit Cloud (torch too large). "
+            "Use the baseline model on Cloud; run DeBERTa locally.\n\n"
+            "4. After updating secrets or pushing code changes, use three-dot menu -> "
+            "Reboot app to force a full restart."
+        ),
+    },
+    {
+        "heading": "9. File Locations",
         "body": (
             "  data/incoming/         — Raw batches exported from Google Sheets\n"
             "  data/review_exports/   — Model predictions + compact review sheets\n"
-            "  data/reviewed/         — Completed RA review files\n"
+            "  data/reviewed/         — Completed RA review files (local copies)\n"
             "  data/training/         — Master labeled dataset (used for retraining)\n"
             "  data/processed/        — Normalized yearly CSVs (2023, 2024, 2025)\n"
             "  analysis/              — SPSS .sav, R CSV, codebook, R analysis script\n"
             "  modeling/saved_models/ — Baseline and DeBERTa model artifacts\n"
             "  modeling/backups/      — Timestamped model checkpoints\n"
             "  logs/                  — Pipeline run logs (pipeline_YYYYMMDD.log)\n"
-            "  config/                — Label codebook YAML"
+            "  config/                — Label codebook YAML\n"
+            "  docs/                  — PDF user guide and generator script\n"
+            "  requirements.txt       — Streamlit Cloud dependencies (no torch)\n"
+            "  requirements-gpu.txt   — Local DeBERTa dependencies (torch + transformers)"
         ),
     },
     {
-        "heading": "8. Common Issues",
+        "heading": "10. Common Issues",
         "body": (
+            "100% of rows flagged for review\n"
+            "  Normal for the first batch before the model is retrained on your data. "
+            "Confidence improves as reviewed batches are merged and the model is retrained.\n\n"
             "No articles scraped (0 new reports)\n"
-            "  Cause: robots.txt block or network issue.\n"
-            "  Fix: Check the log for 'robots.txt' warnings. Try --skip-ingest "
-            "and re-export from what is already in Sheets.\n\n"
-            "pyreadstat not installed\n"
-            "  Fix: pip install pyreadstat  (or check 'Skip SPSS export' on the "
-            "Export Analysis page).\n\n"
+            "  Check the log for robots.txt warnings. Use Skip Ingest and re-run.\n\n"
+            "service_account.json not found\n"
+            "  Add credentials to Streamlit Cloud Secrets under [gcp_service_account].\n\n"
             "DeBERTa weights not found\n"
-            "  Fix: Download from HuggingFace Hub into "
-            "modeling/saved_models/deberta_v3_multilabel/deberta_v3_best/\n\n"
-            "Google Sheets authentication error\n"
-            "  Fix: Ensure the service account JSON key path is set in environment "
-            "variable GOOGLE_APPLICATION_CREDENTIALS, or in Streamlit secrets.\n\n"
-            "Log disappears when clicking buttons\n"
-            "  This is fixed — logs are stored in session state and persist across "
-            "page interactions."
+            "  Download from HuggingFace Hub into "
+            "modeling/saved_models/deberta_v3_multilabel/deberta_v3_best/\n"
+            "  Install GPU deps first: pip install -r requirements-gpu.txt\n\n"
+            "pyreadstat not installed\n"
+            "  pip install pyreadstat  or check 'Skip SPSS export' on the Export page.\n\n"
+            "Transfer to Incidents shows 0 rows\n"
+            "  No rows have review_status = reviewed yet. RAs must complete their review first."
         ),
     },
 ]
@@ -380,7 +383,7 @@ def build_pdf_bytes() -> bytes:
         pdf.ln(4)
 
         # Page break before long major sections
-        if heading in ("4. RA Review Workflow", "6. Models", "8. Common Issues"):
+        if heading in ("5. RA Review Workflow", "7. Models", "9. File Locations"):
             pdf.add_page()
 
     return bytes(pdf.output())
