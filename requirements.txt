@@ -47,3 +47,6 @@ seaborn>=0.13
 
 # ── Statistical export (SPSS / R) ─────────────────────────────────────────────
 pyreadstat>=1.2          # write .sav (SPSS) files with variable and value labels
+
+# ── Documentation ──────────────────────────────────────────────────────────────
+fpdf2>=2.7               # generate PDF user guide from dashboard

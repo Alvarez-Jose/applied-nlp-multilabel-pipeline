@@ -655,6 +655,186 @@ def page_review():
 
 
 # ---------------------------------------------------------------------------
+# Page: Documentation
+# ---------------------------------------------------------------------------
+
+_DOCS = [
+    ("1. Project Overview", (
+        "The Palestine Violence Archive is a research pipeline for a political science "
+        "lab at UC San Diego. It automatically collects WAFA news articles about human "
+        "rights incidents in the West Bank, classifies each incident across 10 violence "
+        "labels using ML, routes uncertain cases to human reviewers, and retrains the "
+        "model as labeled data accumulates. The goal is a clean dataset the professor "
+        "can export to SPSS or R for publication."
+    )),
+    ("2. Pipeline Flow", (
+        "**Ingest** - Scrapes new WAFA articles into the Google Sheets 'Reports' tab. "
+        "Duplicate URLs are skipped automatically.\n\n"
+        "**Export** - Reads unprocessed rows from Sheets and saves them as a timestamped "
+        "CSV in `data/incoming/`.\n\n"
+        "**Predict** - Runs the baseline (TF-IDF + logistic regression) or DeBERTa v3 "
+        "model. Produces a compact review sheet in `data/review_exports/` with predictions, "
+        "confidence scores, uncertainty flags, and empty `human_*` columns for RAs.\n\n"
+        "**Retrain** - After RAs review and labels are merged into the training dataset, "
+        "the baseline model is rebuilt and evaluated."
+    )),
+    ("3. Dashboard Pages", None),
+    ("Dashboard", (
+        "Live snapshot of the pipeline state:\n\n"
+        "- **Incoming batch size** - Articles in `data/incoming/` not yet reviewed\n"
+        "- **Review queue** - Rows in the latest sheet with `review_status != 'reviewed'`\n"
+        "- **Model metrics** - Per-label F1, precision, recall from the last training run\n"
+        "- **IRR panel** - Cohen's Kappa inter-rater reliability for double-reviewed rows. "
+        "Kappa above 0.80 = strong agreement. Click 'Compute IRR' to refresh after each batch."
+    )),
+    ("Run Pipeline", (
+        "Main control panel for the ingest -> export -> predict workflow:\n\n"
+        "- **Model** - 'baseline' is fast (CPU). 'deberta' is more accurate (GPU recommended).\n"
+        "- **Skip ingest** - Use existing Sheets data without scraping new articles.\n"
+        "- **Re-export all** - Forces re-export ignoring the already-exported tracker.\n"
+        "- **Push to Sheets** - Uploads the review sheet to the Google Sheets 'Review' tab.\n"
+        "- **Dry run** - Prints what each step would do without writing any files. Always safe.\n"
+        "- **Deduplicate** - Removes near-duplicate articles (same date + region + similar text).\n"
+        "- **Max rows** - Caps the batch. Recommended: 100-150 to keep reviews manageable.\n"
+        "- **Log output** - Streams live and persists after the run so you can scroll it."
+    )),
+    ("Review Access", (
+        "Access to review files and Google Sheets:\n\n"
+        "- **Google Sheets link** - Opens the shared spreadsheet. 'Reports' tab = raw articles; "
+        "'Review' tab = model predictions with empty `human_*` columns for RAs.\n"
+        "- **Latest review file** - Preview of the most recent `review_compact_*.xlsx` or `.csv`.\n"
+        "- **Latest predictions** - Raw inference audit trail (all confidence scores and flags).\n"
+        "- **RA workflow reminder** - Step-by-step instructions for filling in the review sheet."
+    )),
+    ("Export Analysis", (
+        "Exports the cleaned incident database for the professor:\n\n"
+        "- **Years** - Which years to include (default: 2023 2024 2025). Requires "
+        "`data/processed/oppression_{year}.csv` - run `normalize_raw.py` first if missing.\n"
+        "- **Output directory** - Where to write files (default: `analysis/`).\n"
+        "- **Skip SPSS** - Check this if `pyreadstat` is not installed.\n"
+        "- **Exported files** - Lists `.sav` (SPSS/JASP), `.csv` (R/Excel), and "
+        "`codebook_variables.csv` with sizes. The `.sav` has full variable labels and "
+        "0=No / 1=Yes value labels for all binary columns.\n"
+        "- **R usage snippet** - Copy-paste code to load in R with or without value labels."
+    )),
+    ("Retrain (Admin)", (
+        "Rebuilds the active model. Only run after enough reviewed batches are merged:\n\n"
+        "- **Training data stats** - Current row count of `master_reviewed_dataset.csv`.\n"
+        "- **Checkpoint system** - Auto-creates a timestamped backup before any destructive "
+        "action. Manually create or restore checkpoints at any time from this page.\n"
+        "- **Retrain baseline** - Runs `export_training_data.py` + `train_baseline_multilabel.py`. "
+        "Takes 1-5 minutes on CPU.\n"
+        "- **Retrain DeBERTa** - Fine-tunes the transformer. Requires GPU; plan 1-3 hours.\n"
+        "- **Merge reviewed labels** - Merges a completed review XLSX into the master CSV. "
+        "Auto-checkpoints before merging."
+    )),
+    ("4. RA Review Workflow", (
+        "**Step 1** - Open the review sheet via the Google Sheets link or download the `.xlsx` "
+        "from `data/review_exports/`.\n\n"
+        "**Step 2** - For each row, read `description` and fill the 10 `human_*` columns with "
+        "1 (yes) or 0 (no). Leave blank if uncertain and add a `reviewer_notes` comment.\n\n"
+        "**Step 3** - For rows with `double_review = TRUE`, a second RA should independently "
+        "fill `human2_*` columns without seeing the first RA's answers. This enables IRR tracking.\n\n"
+        "**Step 4** - Set `review_status = 'reviewed'` for completed rows.\n\n"
+        "**Step 5** - Save to `data/reviewed/` and notify the pipeline operator to run "
+        "the Merge step in the Retrain page."
+    )),
+    ("5. Incident Labels", (
+        "Each incident is classified across 10 binary labels (1 = present):\n\n"
+        "- **Raid** - Organized entry by Israeli forces into a Palestinian area.\n"
+        "- **Arrest/Detention** - Apprehension or detention by Israeli forces or the PA.\n"
+        "- **Physical Assault** - Shooting, beating, tear gas, stun grenades, dogs.\n"
+        "- **Coercive Actions** - Intimidation/harassment without direct assault.\n"
+        "- **Restriction of Freedoms** - Curfews, checkpoints, roadblocks.\n"
+        "- **Religious Encroachment** - Incursion into or desecration of religious sites.\n"
+        "- **Harm to Property** - Vandalism or destruction of Palestinian property.\n"
+        "- **Dispossession** - Seizure or theft of land, livestock, crops, or assets.\n"
+        "- **Protest** - Organized Palestinian demonstration or civil resistance.\n"
+        "- **Multi-Community Incident** - Coordinated action across multiple communities."
+    )),
+    ("6. Models", (
+        "**Baseline (TF-IDF + Logistic Regression)**\n"
+        "Location: `modeling/saved_models/baseline_rank_based_fixed/`\n"
+        "Fast on CPU. Uses rank-based thresholding: predicts the top-k articles per label "
+        "where k matches the training prevalence rate.\n\n"
+        "**DeBERTa v3 (Transformer)**\n"
+        "Location: `modeling/saved_models/deberta_v3_multilabel/`\n"
+        "Weights on HuggingFace Hub (`jalva182/palestine-violence-deberta`). Slow on CPU; "
+        "use GPU for production runs.\n\n"
+        "Both models output a confidence score (0-1) per label. Rows where confidence is "
+        "within 0.10 of the threshold are flagged `needs_review = TRUE`."
+    )),
+    ("7. File Locations", (
+        "| Path | Contents |\n"
+        "|------|----------|\n"
+        "| `data/incoming/` | Raw batches exported from Sheets |\n"
+        "| `data/review_exports/` | Predictions + compact review sheets |\n"
+        "| `data/reviewed/` | Completed RA review files |\n"
+        "| `data/training/` | Master labeled dataset |\n"
+        "| `data/processed/` | Normalized yearly CSVs |\n"
+        "| `analysis/` | SPSS .sav, R CSV, codebook, R analysis script |\n"
+        "| `modeling/saved_models/` | Baseline and DeBERTa artifacts |\n"
+        "| `modeling/backups/` | Timestamped checkpoints |\n"
+        "| `logs/` | Pipeline run logs |\n"
+        "| `config/` | Label codebook YAML |"
+    )),
+    ("8. Common Issues", (
+        "**No articles scraped (0 new reports)**\n"
+        "robots.txt block or network issue. Check the log for warnings. "
+        "Try --skip-ingest and re-export from existing Sheets data.\n\n"
+        "**pyreadstat not installed**\n"
+        "`pip install pyreadstat` or check 'Skip SPSS export' on the Export page.\n\n"
+        "**DeBERTa weights not found**\n"
+        "Download from HuggingFace Hub into `modeling/saved_models/deberta_v3_multilabel/deberta_v3_best/`.\n\n"
+        "**Google Sheets authentication error**\n"
+        "Set `GOOGLE_APPLICATION_CREDENTIALS` env var to your service account JSON path, "
+        "or add it to Streamlit secrets.\n\n"
+        "**Log disappears when clicking buttons**\n"
+        "This is fixed - logs are stored in session state and persist across page interactions."
+    )),
+]
+
+
+def page_docs():
+    st.header("Documentation")
+    st.caption("User guide for the dashboard, pipeline, and RA review workflow.")
+
+    # Download PDF button
+    pdf_path = PROJECT_ROOT / "docs" / "Dashboard_User_Guide.pdf"
+    try:
+        from docs.generate_dashboard_guide import build_pdf_bytes  # type: ignore
+        pdf_bytes = build_pdf_bytes()
+    except Exception:
+        pdf_bytes = pdf_path.read_bytes() if pdf_path.exists() else None
+
+    if pdf_bytes:
+        st.download_button(
+            label="Download PDF Guide",
+            data=pdf_bytes,
+            file_name="Dashboard_User_Guide.pdf",
+            mime="application/pdf",
+        )
+    else:
+        st.warning("PDF not found. Run: `python docs/generate_dashboard_guide.py`")
+
+    st.divider()
+
+    # Render inline docs
+    for heading, body in _DOCS:
+        if body is None:
+            st.subheader(heading)
+            continue
+        # Top-level numbered sections as expanders; sub-items as plain markdown
+        if heading[0].isdigit() and "." in heading[:3]:
+            with st.expander(heading, expanded=True):
+                st.markdown(body)
+        else:
+            st.markdown(f"**{heading}**")
+            st.markdown(body)
+            st.divider()
+
+
+# ---------------------------------------------------------------------------
 # Page: Export for Analysis
 # ---------------------------------------------------------------------------
 
@@ -939,6 +1119,7 @@ PAGES = {
     "📋 Review Access":    page_review,
     "📤 Export Analysis":  page_export,
     "🔁 Retrain":          page_retrain,
+    "📖 Documentation":    page_docs,
 }
 
 
