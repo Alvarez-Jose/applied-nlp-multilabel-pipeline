@@ -18,19 +18,17 @@ scipy>=1.13
 pyarrow>=16             # parquet export in export_training_data.py
 openpyxl>=3.1           # Excel read/write for reviewed sheets
 
-# ── ML — inference ────────────────────────────────────────────────────────────
-# CPU-only PyTorch index — keeps install small on Streamlit Cloud.
-# For local GPU use, install the CUDA build separately after pip install -r requirements.txt.
---extra-index-url https://download.pytorch.org/whl/cpu
+# ── ML — baseline inference (CPU, no torch needed) ────────────────────────────
 scikit-learn>=1.5
 joblib>=1.4
-torch>=2.1,<2.6
-transformers>=4.41
-safetensors>=0.4
-sentencepiece>=0.2      # DeBERTa tokenizer
 
-# ── ML — training ─────────────────────────────────────────────────────────────
-accelerate>=0.30        # DeBERTa fine-tuning
+# ── ML — DeBERTa / transformer inference  (local/GPU only) ───────────────────
+# torch, transformers, safetensors, sentencepiece are NOT listed here because
+# torch is 800MB+ and causes Streamlit Cloud installs to time out or roll back,
+# which prevents gspread and other core packages from installing.
+# Install these locally with requirements-gpu.txt for DeBERTa fine-tuning.
+
+# ── ML — training utilities ───────────────────────────────────────────────────
 datasets>=2.19          # HuggingFace dataset utilities
 evaluate>=0.4           # HuggingFace metrics
 

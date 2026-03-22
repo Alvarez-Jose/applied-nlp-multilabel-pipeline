@@ -1,0 +1,16 @@
+# ── DeBERTa / transformer dependencies (local and GPU use only) ───────────────
+# Install after requirements.txt:
+#   pip install -r requirements.txt
+#   pip install -r requirements-gpu.txt
+#
+# For CPU-only local use:
+#   pip install -r requirements-gpu.txt
+#
+# For CUDA (GPU):
+#   pip install -r requirements-gpu.txt --index-url https://download.pytorch.org/whl/cu121
+
+torch>=2.1,<2.6
+transformers>=4.41
+safetensors>=0.4
+sentencepiece>=0.2
+accelerate>=0.30
