@@ -83,6 +83,7 @@ META_COLS = ["area", "governorate", "location_type", "perpetrator"]
 # Default paths (relative to project root)
 BASELINE_MODEL_DIR    = PROJECT_ROOT / "modeling" / "saved_models" / "baseline_rank_based_fixed"
 DEBERTA_MODEL_DIR     = PROJECT_ROOT / "modeling" / "saved_models" / "deberta_v3_multilabel" / "deberta_v3_best"
+DEBERTA_HF_REPO       = "jalva182/palestine-violence-deberta"  # HuggingFace Hub (private)
 DEBERTA_META_PATH     = PROJECT_ROOT / "modeling" / "saved_models" / "deberta_v3_multilabel" / "deberta_v3_meta.json"
 DEFAULT_CODEBOOK_PATH = PROJECT_ROOT / "config" / "label_codebook.yaml"
 
@@ -192,18 +193,34 @@ def load_deberta_model(model_dir: Path) -> Tuple[object, object, dict, str]:
 
     if not DEBERTA_META_PATH.exists():
         raise FileNotFoundError(f"DeBERTa metadata not found: {DEBERTA_META_PATH}")
-    if not model_dir.exists():
-        raise FileNotFoundError(f"DeBERTa model directory not found: {model_dir}")
 
-    log.info("Loading DeBERTa model from %s ...", model_dir)
     with open(DEBERTA_META_PATH, "r", encoding="utf-8") as f:
         meta = json.load(f)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     log.info("Using device: %s", device)
 
-    tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
-    model = AutoModelForSequenceClassification.from_pretrained(str(model_dir))
+    # Load from local directory if it exists, otherwise fall back to HF Hub.
+    # HF Hub weights are cached after the first download (~738 MB, one-time).
+    if model_dir.exists():
+        model_source = str(model_dir)
+        log.info("Loading DeBERTa from local path: %s", model_dir)
+    else:
+        model_source = DEBERTA_HF_REPO
+        log.info("Local model not found — loading DeBERTa from HF Hub: %s", DEBERTA_HF_REPO)
+
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_source)
+        model = AutoModelForSequenceClassification.from_pretrained(model_source)
+    except OSError as exc:
+        if model_source == DEBERTA_HF_REPO:
+            raise OSError(
+                f"Could not load DeBERTa from HF Hub ({DEBERTA_HF_REPO}).\n"
+                "If this is a private repo, authenticate first:\n"
+                "  huggingface-cli login\n"
+                "or set the HF_TOKEN environment variable."
+            ) from exc
+        raise
     model.to(device)
     model.eval()
 
