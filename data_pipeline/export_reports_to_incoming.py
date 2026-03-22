@@ -129,6 +129,7 @@ def export(
     output_path: Path,
     export_all: bool,
     dry_run: bool,
+    max_rows: int | None = None,
 ) -> None:
 
     # --- 1. Pull Reports from Sheets ---
@@ -203,6 +204,13 @@ def export(
 
     out_df = pd.DataFrame(rows)
 
+    # Apply batch size cap — keep the most recent rows (last scraped = highest report_id)
+    skipped_capped = 0
+    if max_rows is not None and len(out_df) > max_rows:
+        skipped_capped = len(out_df) - max_rows
+        out_df = out_df.tail(max_rows).reset_index(drop=True)
+        log.info("--max-rows %d applied: exporting %d rows, deferring %d.", max_rows, len(out_df), skipped_capped)
+
     # --- 3. Summary ---
     print("\n" + "=" * 58)
     print("  REPORTS EXPORT SUMMARY")
@@ -212,6 +220,8 @@ def export(
     print(f"  Skipped (non-English)  : {skipped_language}")
     print(f"  Skipped (already done) : {skipped_exported}")
     print(f"  Ready to export        : {len(rows)}")
+    if skipped_capped:
+        print(f"  Capped by --max-rows   : {skipped_capped} deferred to next batch")
     print()
     print("  Sample descriptions (first 3):")
     for _, r in out_df.head(3).iterrows():
@@ -262,12 +272,24 @@ def main() -> None:
         action="store_true",
         help="Show what would be exported without writing any files.",
     )
+    parser.add_argument(
+        "--max-rows",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Maximum number of rows to export in one batch. "
+            "Keeps the most recently scraped N reports; the rest are deferred to the next run. "
+            "Useful for keeping review batches manageable (recommended: 100-200)."
+        ),
+    )
     args = parser.parse_args()
 
     export(
         output_path=Path(args.output),
         export_all=args.all,
         dry_run=args.dry_run,
+        max_rows=args.max_rows,
     )
 
 

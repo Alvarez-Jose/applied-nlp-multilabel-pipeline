@@ -493,6 +493,7 @@ def page_run():
         with col2:
             push_sheets = st.checkbox("Push compact review sheet to Google Sheets Review tab")
             dry_run     = st.checkbox("Dry run (preview only — no files written)")
+            max_rows    = st.number_input("Max rows per batch (0 = no cap)", min_value=0, value=0, step=50)
 
         submitted = st.form_submit_button("▶  Run Pipeline", type="primary")
 
@@ -506,6 +507,8 @@ def page_run():
             cmd.append("--push-to-sheets")
         if dry_run:
             cmd.append("--dry-run")
+        if max_rows and max_rows > 0:
+            cmd.extend(["--max-rows", str(max_rows)])
         _run_and_store(cmd)
 
     # --- Quick shortcuts ---

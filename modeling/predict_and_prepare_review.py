@@ -573,6 +573,13 @@ def format_full_output(
     for col in ["row_id", "id", "date", "governorate", "area",
                 "location_name", "location_type", "perpetrator"]:
         out[col] = input_df[col].values if col in input_df.columns else ""
+    # source_name: prefer source_2 (human-readable name), fall back to source_1 (URL)
+    if "source_2" in input_df.columns:
+        out["source_name"] = input_df["source_2"].fillna("").values
+    elif "source_1" in input_df.columns:
+        out["source_name"] = input_df["source_1"].fillna("").values
+    else:
+        out["source_name"] = ""
 
     # 3. Description
     out["description"] = input_df["description"].values if "description" in input_df.columns else ""
@@ -663,6 +670,13 @@ def format_compact_output(
     for col in ["row_id", "id", "date", "governorate", "area",
                 "location_name", "location_type", "perpetrator"]:
         out[col] = input_df[col].values if col in input_df.columns else ""
+    # source_name: prefer source_2 (human-readable name), fall back to source_1 (URL)
+    if "source_2" in input_df.columns:
+        out["source_name"] = input_df["source_2"].fillna("").values
+    elif "source_1" in input_df.columns:
+        out["source_name"] = input_df["source_1"].fillna("").values
+    else:
+        out["source_name"] = ""
 
     # 3. Description
     out["description"] = input_df["description"].values if "description" in input_df.columns else ""

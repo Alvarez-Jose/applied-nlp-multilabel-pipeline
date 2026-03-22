@@ -142,6 +142,13 @@ def main() -> None:
         help="Re-export all Reports (ignore already-exported tracking).",
     )
     parser.add_argument(
+        "--max-rows",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Cap the export batch at N rows. Recommended: 100-200 to keep review manageable.",
+    )
+    parser.add_argument(
         "--retrain-only",
         action="store_true",
         help="Only run the retraining steps (export_training_data + train_baseline). "
@@ -223,6 +230,8 @@ def main() -> None:
         ]
         if args.export_all:
             export_cmd.append("--all")
+        if args.max_rows is not None:
+            export_cmd.extend(["--max-rows", str(args.max_rows)])
         if args.dry_run:
             export_cmd.append("--dry-run")
 
