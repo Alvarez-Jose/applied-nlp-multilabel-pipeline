@@ -294,6 +294,53 @@ A prediction is flagged for human review if the model's confidence score is with
 
 ---
 
+## Evaluation
+
+The pipeline reports three categories of metrics, in order of recruiter relevance:
+
+1. **Headline classification quality** — macro/micro F1 on the held-out test split, plus per-label precision, recall, and F1.
+2. **Calibration** — Expected Calibration Error (ECE) and a reliability diagram, so top-1 probabilities mean what they claim.
+3. **Routing effectiveness** — the fraction of test examples that can be auto-labeled at a given precision target, and the precision lift from sending margin-low examples to human review. This is the metric that justifies the HITL design.
+
+### Reported numbers
+
+> Numbers from the underlying private deployment (proprietary 10-label codebook, Arabic/English news incidents) are documented on the private Hugging Face model card for `jalva182/palestine-violence-deberta`. Access is granted alongside dataset access by separate agreement.
+>
+> Public-benchmark numbers (running the same pipeline on a public multilabel dataset — planned: GoEmotions or EUR-Lex) will be filled into the tables below when that benchmark run lands.
+
+**Headline (macro-averaged on held-out test split)**
+
+| Setup | macro-F1 | macro-Precision | macro-Recall | Params |
+|---|---|---|---|---|
+| TF-IDF + Logistic Regression baseline | _TBD_ | _TBD_ | _TBD_ | ~1M |
+| DeBERTa-v3-base, multilabel head | **_TBD_** | _TBD_ | _TBD_ | 184M |
+
+Reported alongside: micro-F1, weighted-F1, and per-label precision/recall/F1/support tables.
+
+**Calibration**
+
+| Setup | ECE | Brier (mean) | Reliability diagram |
+|---|---|---|---|
+| Baseline | _TBD_ | _TBD_ | `docs/calibration_baseline.png` (forthcoming) |
+| DeBERTa-v3-base | _TBD_ | _TBD_ | `docs/calibration_deberta.png` (forthcoming) |
+
+**Routing effectiveness — the HITL win condition**
+
+| Margin threshold τ | Auto-labeled fraction | Auto-labeled precision | Sent to reviewer | Total throughput vs full-manual |
+|---|---|---|---|---|
+| τ = _TBD_ | _TBD_% | _TBD_% | _TBD_% | _TBD_× |
+
+The point of the table above is to make explicit what a HITL system is supposed to deliver: **most examples get a confident automated label, only the ambiguous ones consume reviewer time.** A model that's accurate on average isn't enough — it has to be calibrated enough that low-margin examples are the genuinely hard ones.
+
+### Methodology notes
+
+- Splits: stratified train/val/test on document-level groupings, fixed seed 42.
+- Per-label sigmoid thresholds tuned on the validation split (sweeping on macro-F1, then sanity-checked against per-label precision floors).
+- For multilabel calibration, ECE is computed per label and macro-averaged.
+- Uncertainty band (`--confidence-band 0.10`) is a top-line knob; the routing-effectiveness table sweeps this to surface the precision/throughput tradeoff.
+
+---
+
 ## Model weights
 
 The fine-tuned DeBERTa v3 multilabel weights for the original research project are hosted on the Hugging Face Hub at **[`jalva182/palestine-violence-deberta`](https://huggingface.co/jalva182/palestine-violence-deberta)** as a private model.
