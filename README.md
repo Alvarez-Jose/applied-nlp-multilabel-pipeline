@@ -304,18 +304,16 @@ The pipeline reports three categories of metrics, in order of recruiter relevanc
 
 ### Reported numbers
 
-> Numbers from the underlying private deployment (proprietary 10-label codebook, Arabic/English news incidents) are documented on the private Hugging Face model card for `jalva182/palestine-violence-deberta`. Access is granted alongside dataset access by separate agreement.
->
-> Public-benchmark numbers (running the same pipeline on a public multilabel dataset — planned: GoEmotions or EUR-Lex) will be filled into the tables below when that benchmark run lands.
+**Headline — held-out 2025 data, proprietary 10-label codebook**
 
-**Headline (macro-averaged on held-out test split)**
+| Setup | macro-F1 | micro-F1 | Params |
+|---|---|---|---|
+| TF-IDF + Logistic Regression baseline | 0.549 | 0.658 | ~1M |
+| DeBERTa-v3-base, multilabel head | **0.676** | **0.754** | 184M |
 
-| Setup | macro-F1 | macro-Precision | macro-Recall | Params |
-|---|---|---|---|---|
-| TF-IDF + Logistic Regression baseline | _TBD_ | _TBD_ | _TBD_ | ~1M |
-| DeBERTa-v3-base, multilabel head | **_TBD_** | _TBD_ | _TBD_ | 184M |
+DeBERTa lifts macro-F1 by **+0.127 absolute (+23%)** and micro-F1 by **+0.096 absolute (+15%)** over the TF-IDF baseline. Per-label precision/recall/F1/support breakdowns are documented on the private Hugging Face model card for [`jalva182/palestine-violence-deberta`](https://huggingface.co/jalva182/palestine-violence-deberta) — access alongside dataset access by separate agreement.
 
-Reported alongside: micro-F1, weighted-F1, and per-label precision/recall/F1/support tables.
+Public-benchmark numbers (running the same pipeline on a public multilabel dataset — planned: GoEmotions or EUR-Lex) will be added when that benchmark run lands.
 
 **Calibration**
 
