@@ -2,15 +2,15 @@
 
 > A research pipeline for multilabel text classification with margin-based uncertainty routing to human reviewers, end-to-end Google Sheets integration, and an active-retraining loop. Applied in production to a private human-rights research project.
 
-> ⚠️ **Restricted-use repository.** Source-available for review. See [`NOTICE.md`](NOTICE.md) — no license is granted; all rights reserved.
+> **Restricted-use repository.** Source-available for review. See [`NOTICE.md`](NOTICE.md) — no license is granted; all rights reserved.
 >
-> 📦 **Data not included.** This repository ships the engineering only. The research dataset and trained model weights are not distributed here. See [Data not included](#data-not-included) below.
+> **Data not included.** This repository ships the engineering only. The research dataset and trained model weights are not distributed here. See [Data not included](#data-not-included) below.
 
 ---
 
 ## What this is
 
-The engineering side of an end-to-end multilabel text-classification system. Articles are scraped from a configured news source, written to Google Sheets, classified by either a TF-IDF baseline or a fine-tuned DeBERTa v3 multilabel head, and routed to research assistants for review. Corrected labels feed back into training and confirmed records promote to a publication-layer database. A Streamlit dashboard fronts the workflow.
+The engineering side of an end-to-end multilabel text-classification system. Articles are scraped from a configured news source, written to Google Sheets, classified by either a TF-IDF baseline or a fine-tuned DeBERTa v3 multilabel head, and routed to research assistants for review. Corrected labels feed back into training, and confirmed records are promoted to a publication-layer database. A Streamlit dashboard fronts the workflow.
 
 The classification pattern, the human-in-the-loop design, and the Sheets-backed feedback loop are the artifacts I'm sharing — not the underlying dataset.
 
@@ -19,7 +19,7 @@ The classification pattern, the human-in-the-loop design, and the Sheets-backed 
 ## Architecture
 
 ```
-1. Scrape articles from configured news source
+1. Scrape articles from the configured news source
        |
        v
 2. Push to Google Sheets (Reports tab)
@@ -37,7 +37,7 @@ The classification pattern, the human-in-the-loop design, and the Sheets-backed 
 6. Research assistants review and correct labels in Sheets
        |
        v
-7. Finalize confirmed records to Incidents tab (publication layer)
+7. Finalize confirmed records to the Incidents tab (publication layer)
        |
        +----> retrain model and repeat
 ```
@@ -232,7 +232,7 @@ After the pipeline runs, research assistants review model predictions in Google 
 
 1. Open the **Review** tab. New rows are added by the pipeline.
 2. For each row, fill in `human_{label}` columns: `1` for applies, `0` for does not, blank to accept the model prediction.
-3. Rows where `needs_review = TRUE` have low margin or a rare label predicted — prioritize these. The `codebook_conflict` column flags label combinations inconsistent with the codebook.
+3. Rows where `needs_review = TRUE` have a low margin or a rare label predicted — prioritize these. The `codebook_conflict` column flags label combinations inconsistent with the codebook.
 4. Set `review_status = reviewed` when done. Add notes to `reviewer_notes`.
 5. A lab admin merges:
    ```bash
@@ -257,7 +257,7 @@ python data_pipeline/finalize_incidents.py
 The script:
 - Reads all rows with `review_status = reviewed` from the Review tab
 - Resolves each label: `human_{label}` if filled; falls back to `pred_{label}`
-- Strips all pipeline columns; writes only clean fields to Incidents tab
+- Strips all pipeline columns; writes only clean fields to the Incidents tab
 - Idempotent (skips rows already present)
 
 ---
@@ -419,7 +419,7 @@ Outputs:
 
 - All scripts resolve paths relative to `PROJECT_ROOT = Path(__file__).resolve().parent` — do not rely on the current working directory
 - Google Sheets ID is configured in `data_pipeline/database/sheets_interface.py` — point it at your own spreadsheet
-- `service_account.json` must be in the project root and is gitignored; on Streamlit Cloud it's written from secrets at startup
+- `service_account.json` must be in the project root and is gitignored; on Streamlit Cloud, it's written from secrets at startup
 - Pipeline logs are written to `logs/pipeline_{timestamp}.log` in addition to stdout
 - Large model files use Git LFS; DeBERTa weights are excluded from git entirely and hosted on HF Hub
 - To regenerate the PDF user guide: `python docs/generate_dashboard_guide.py`
